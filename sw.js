@@ -1,5 +1,5 @@
 // Service worker : garde l'appli disponible même sans réseau. Change VERSION à chaque mise à jour des fichiers.
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = `mes-fils-${VERSION}`;
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
@@ -11,7 +11,7 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -25,20 +25,17 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return; // Supabase : toujours en direct
+  // Réseau d'abord : l'appli se met à jour dès qu'on l'ouvre avec du réseau ; le cache ne sert qu'en secours
   e.respondWith(
     caches.open(CACHE).then(async (cache) => {
-      const cached = await cache.match(req, { ignoreSearch: false });
-      const network = fetch(req)
-        .then((res) => {
-          if (res.ok) cache.put(req, res.clone());
-          return res;
-        })
-        .catch(() => null);
-      if (cached) {
-        network; // mise à jour en arrière-plan
-        return cached;
+      try {
+        const res = await fetch(req.mode === 'navigate' ? req.url : req, { cache: 'no-cache' });
+        if (res.ok) cache.put(req, res.clone());
+        return res;
+      } catch (err) {
+        const cached = await cache.match(req);
+        return cached || (req.mode === 'navigate' ? cache.match('index.html') : Response.error());
       }
-      return (await network) || (req.mode === 'navigate' ? cache.match('index.html') : Response.error());
     }),
   );
 });
