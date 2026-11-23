@@ -1,5 +1,5 @@
 // Service worker : garde l'appli disponible même sans réseau. Change VERSION à chaque mise à jour des fichiers.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = `mes-fils-${VERSION}`;
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',

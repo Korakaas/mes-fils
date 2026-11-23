@@ -1,6 +1,6 @@
 import * as store from '../store.js';
 import * as L from '../logic.js';
-import { parsePattern } from '../patternParse.js';
+import { parsePattern, applyVariant } from '../patternParse.js';
 import { extractPdfText, renderPdf, shrinkImage } from '../media.js';
 import {
   ui, actions, inputs, submits, esc, icons, topbar, data, go, toast, confirmSheet, pickFile, toNum, numStr, yarnTitle, emptyState, photoAttrs, hydratePhotos, rerender,
@@ -75,6 +75,8 @@ actions['pattern.pickPdf'] = async () => {
       fileName: file.name,
       fileType: 'pdf',
       materials: parsed.materials.map(withId),
+      variants: parsed.variants || [],
+      variantIdx: 0,
       readNote: readNote || (parsed.materials.length ? '' : 'Aucun matériel reconnu : ajoute les lignes à la main.'),
       fromRead: parsed.materials.length > 0,
     };
@@ -126,6 +128,7 @@ export function renderPatternEditor(id) {
       <div class="field"><label for="p-link">Lien du patron (facultatif)</label><input id="p-link" name="link" type="url" value="${esc(p.link || '')}" placeholder="https://"></div>
       ${p.readNote ? `<div class="banner warn" style="margin-bottom:12px">${icons.alert}<span>${esc(p.readNote)}</span></div>` : ''}
       ${p.fromRead ? `<div class="banner warn" style="margin-bottom:12px">${icons.alert}<span>À vérifier<span class="sub">L’appli a lu ces lignes dans le PDF : corrige ce qui est faux.</span></span></div>` : ''}
+      ${variantChips(p)}
       <div class="section" style="margin-top:6px"><h2>Matériel${yarnRows.length ? `<small>${covered} fil${covered > 1 ? 's' : ''} sur ${yarnRows.length} couvert${covered > 1 ? 's' : ''} par ton stock</small>` : ''}</h2>
         <div class="stack" id="mat-list">${mats.map((m, i) => materialRow(m, i, d)).join('') || '<p class="hint">Aucune ligne pour l’instant. Ajoute les fils, le crochet et les accessoires.</p>'}</div>
         <div class="row" style="margin-top:10px"><button type="button" class="btn small" data-act="pattern.addRow" data-kind="yarn">+ Fil</button>
@@ -187,6 +190,17 @@ function needHint(m) {
 
 function field(label, name, value, { type = 'text', ph = '', unit = '' } = {}) {
   return `<div class="field" style="margin:0"><label>${label}<input name="${name}" type="text" inputmode="${type === 'num' ? 'decimal' : 'text'}" value="${esc(type === 'num' ? numStr(value) : value || '')}" placeholder="${esc(ph)}" data-input="pattern.row" style="margin-top:4px"></label></div>`;
+}
+
+function variantChips(p) {
+  const vs = p.variants || [];
+  if (vs.length < 2) return '';
+  const cur = Math.min(p.variantIdx || 0, vs.length - 1);
+  const v = vs[cur];
+  const g = (v.yarns || []).map((y) => y.grams).filter(Boolean);
+  return `<div class="section" style="margin-top:6px"><h2>Taille du patron</h2>
+    <div class="chips wrap">${vs.map((x, i) => `<button type="button" class="chip" aria-pressed="${i === cur}" data-act="pattern.variant" data-idx="${i}">${esc(x.name)}</button>`).join('')}</div>
+    <p class="hint">${v.sub ? `${esc(v.sub)}. ` : ''}${g.length ? `Fils : ${esc(g.join(' g, '))} g.` : ''} Le patron indique plusieurs tailles : choisis celle que tu crochètes.</p></div>`;
 }
 
 function materialRow(m, i, d) {
@@ -278,6 +292,19 @@ actions['pattern.delRow'] = (el) => {
   }
 };
 
+actions['pattern.variant'] = (el) => {
+  const form = document.getElementById('pattern-form');
+  const id = form.dataset.id;
+  const idx = Number(el.dataset.idx);
+  const cur = id ? currentPatternFromForm(form, store.get('patterns', id)) : keepDraft(form);
+  const v = (cur.variants || [])[idx];
+  if (!v) return;
+  cur.materials = applyVariant(cur.materials, v).map(withId);
+  cur.variantIdx = idx;
+  if (id) store.put('patterns', cur).then(rerender);
+  else rerender();
+};
+
 actions['pattern.read'] = (el) => {
   const form = document.getElementById('pattern-form');
   if (form && !form.dataset.id) keepDraft(form);
@@ -342,6 +369,8 @@ submits['pattern.save'] = async (form) => {
     link: cur.link,
     notes: cur.notes,
     materials: cur.materials,
+    variants: base.variants || [],
+    variantIdx: base.variantIdx || 0,
     fileId: base.fileId || null,
     fileName: base.fileName || '',
     fileType: base.fileType || '',

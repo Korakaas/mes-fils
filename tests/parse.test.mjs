@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePattern, parseQuantities, detectWeight } from '../js/patternParse.js';
+import { applyVariant, parsePattern, parseQuantities, detectWeight } from '../js/patternParse.js';
 
 const FR = `Mushroom Guy
 Amigurumi au crochet
@@ -36,7 +36,8 @@ test('patron en français', () => {
   assert.equal(yarns[2].grams, 130);
   const hook = r.materials.find((m) => m.kind === 'hook');
   assert.equal(hook.size, 2.5);
-  assert.equal(r.materials.filter((m) => m.kind === 'accessory').length, 3);
+  // l'aiguille à laine est un outil : on ne la suit pas dans le matériel
+  assert.equal(r.materials.filter((m) => m.kind === 'accessory').length, 2);
 });
 
 test('patron en anglais avec yards et pelotes', () => {
@@ -63,4 +64,40 @@ test('texte vide ou sans section matériel', () => {
   assert.deepEqual(parsePattern('').materials, []);
   const r = parsePattern('Un joli patron\nRang 1 : 6 ms dans le cercle magique');
   assert.equal(r.found, false);
+});
+
+
+test('patron à plusieurs tailles : versions, crochet, yeux, titre, pas de phrases', () => {
+  const text = [
+    '1', '© 2024 Auteur. This pattern is copyrighted and is for personal use only. This',
+    'pattern cannot be copied or sold.', 'reference the author.', 'Petit Champi',
+    'Things to know', 'Items used:', ' Crochet hook 2.00mm', ' Cotton fingering (4 ply) yarn (up to 3 colours)',
+    ' Stuffing', ' Black safety eyes (10mm)', ' Stitch markers/scrap yarn for stitch count', ' Pointy yarn needle',
+    ' Scissors', ' Craft glue - Optional', 'Abbreviations:', 'sc : single crochet',
+    'Chunky mushroom: 50cm (20 inches)', 'Big Yarn with 5mm hook', 'Eyes: 24mm', 'Colour A: 170g Colour B: 70g Colour C: 130g',
+    'Pocket mushroom: 13cm (5 inches)', 'Tiny Yarn with 0.90mm hook', 'Eyes: 6mm', 'Colour A: 16g Colour B: 7g Colour C: 10g',
+    'Tips and Tricks', ' You can use different weight yarn to make him larger or smaller, just be sure to use the',
+    'Yarn and colours:', 'Natura 100% cotton yarn', '• Colour A (Body): 25 g', '• Colour B (Cap): 16 g',
+    '• Colour D (cheeks): scrap - optional', '• 4 strands of black yarn or embroidery thread;', 'scrap (for mouth)',
+    'Note: The colour section is set up this way to give you creative freedom.',
+    'IMPORTANT: Do not use plastic eyes if intended for children under 3; this is a choking hazard.',
+  ];
+  const r = parsePattern(text.join('\n'));
+  assert.equal(r.title, 'Petit Champi');
+  assert.equal(r.variants.length, 3);
+  assert.deepEqual(r.variants.map((v) => v.name), ['Chunky mushroom (50 cm)', 'Pocket mushroom (13 cm)', 'Fils indiqués dans le patron']);
+  // la première version est appliquée : fils 170/70, crochet 5 mm, yeux 24 mm
+  const yarns = r.materials.filter((m) => m.kind === 'yarn');
+  assert.deepEqual(yarns.map((y) => y.grams), [170, 70, 130]);
+  assert.equal(yarns[0].label, 'Colour A (Body)');
+  assert.equal(r.materials.find((m) => m.kind === 'hook').size, 5);
+  const acc = r.materials.filter((m) => m.kind === 'accessory').map((m) => m.label);
+  assert.deepEqual(acc, ['Stuffing', 'Black safety eyes (24 mm)']);
+  // version standard : épaisseur Fingering reprise de « Cotton fingering »
+  const std = r.variants[2];
+  assert.deepEqual(std.yarns.map((y) => [y.grams, y.weightCategory]), [[25, 'Fingering'], [16, 'Fingering']]);
+  // changer de version
+  const small = applyVariant(r.materials, r.variants[1]);
+  assert.deepEqual(small.filter((m) => m.kind === 'yarn').map((y) => y.grams), [16, 7, 10]);
+  assert.equal(small.find((m) => m.kind === 'hook').size, 0.9);
 });
