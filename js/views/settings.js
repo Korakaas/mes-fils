@@ -57,7 +57,9 @@ export function renderSettings() {
       <button type="button" class="btn block" data-act="settings.demo">Ajouter des fils et projets d’exemple</button>
       <button type="button" class="linkbtn" style="color:var(--bad)" data-act="settings.wipe">Tout effacer sur cet appareil</button></div></div>
     ${store.isMemoryOnly() ? `<div class="banner warn" style="margin-top:14px">${icons.alert}<span>Le stockage de ce navigateur est bloqué : les données seront perdues à la fermeture.</span></div>` : ''}
-    <p class="hint" style="margin:18px 0 0;text-align:center">Mes fils · version 1</p>`;
+    <button type="button" class="btn block" style="margin-top:18px" data-act="settings.refresh">Mettre à jour l’appli</button>
+    <p class="hint" style="margin:8px 0 0;text-align:center">Recharge les derniers fichiers. Tes fils et projets ne sont pas touchés.</p>
+    <p class="hint" style="margin:14px 0 0;text-align:center">Mes fils · version 3</p>`;
 }
 
 submits['settings.save'] = async (form) => {
@@ -179,6 +181,22 @@ actions['settings.import'] = async () => {
   } catch {
     toast('Ce fichier n’est pas une sauvegarde de l’appli');
   }
+};
+
+actions['settings.refresh'] = async () => {
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+  } catch (e) {
+    /* on recharge quand même */
+  }
+  location.reload();
 };
 
 actions['settings.demo'] = async () => {
