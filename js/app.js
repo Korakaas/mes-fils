@@ -6,6 +6,7 @@ import { renderYarn, renderYarnForm, afterYarnForm } from './views/yarn.js';
 import { renderPatterns, renderPatternNew, renderPatternEditor, renderReader, afterReader, afterPatterns } from './views/patterns.js';
 import { renderProjects, renderProjectNew, renderProject, renderChoose, initChoose, afterList, afterProject, changes } from './views/projects.js';
 import { renderSettings } from './views/settings.js';
+import { renderCalendar } from './views/calendar.js';
 
 const view = document.getElementById('view');
 const nav = document.getElementById('nav');
@@ -28,6 +29,7 @@ function route() {
     return { name: 'choose', nav: null, html: () => (initChoose(m[1], m[2]), renderChoose(m[1], m[2])), after: () => {} };
   }
   if ((m = /^#\/projet\/([^/]+)$/.exec(h))) return { name: 'project', nav: 'projets', html: () => renderProject(m[1]), after: afterProject };
+  if (h === '#/calendrier') return { name: 'calendar', nav: 'calendrier', html: renderCalendar, after: () => {} };
   if (h === '#/reglages') return { name: 'settings', nav: null, html: renderSettings, after: () => {} };
   return { name: 'stock', nav: 'stock', html: renderStock, after: () => {} };
 }

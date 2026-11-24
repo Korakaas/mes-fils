@@ -138,3 +138,25 @@ test('petite quantité : assez dès qu’un fil est choisi, restes proposés par
   const known = { ...slot, grams: 500 };
   assert.equal(slotStatus(known, byId, [project], project).scraps, undefined);
 });
+
+test('dates : durée, formats, grille du mois et événements', async () => {
+  const L = await import('../js/logic.js');
+  assert.equal(L.daysBetween('2026-11-01', '2026-11-01'), 1);
+  assert.equal(L.daysBetween('2026-10-28', '2026-11-03'), 7); // heure d'été comprise
+  assert.equal(L.addDays('2026-11-30', 1), '2026-12-01');
+  assert.equal(L.fmtDuration(150), '2 h 30');
+  assert.equal(L.fmtDuration(45), '45 min');
+  assert.equal(L.fmtDuration(120), '2 h');
+  const weeks = L.monthGrid(2026, 10); // novembre 2026 : le 1er est un dimanche
+  assert.equal(weeks[0][0], '2026-10-26');
+  assert.equal(weeks[0][6], '2026-11-01');
+  assert.ok(weeks.flat().includes('2026-11-30'));
+  assert.ok(weeks.every((w) => w.length === 7));
+  const ev = L.projectEvents([
+    { id: 'a', name: 'Renard', startedAt: '2026-11-02', giftDeadline: '2026-12-20', status: 'en_cours' },
+    { id: 'b', name: 'Plaid', startedAt: '2026-10-01', finishedAt: '2026-10-20', deadline: '2026-10-25', status: 'termine' },
+  ]);
+  assert.deepEqual(ev.map((e) => e.type + e.date), ['start2026-10-01', 'end2026-10-20', 'deadline2026-10-25', 'start2026-11-02', 'deadline2026-12-20']);
+  assert.equal(ev.find((e) => e.projectId === 'b' && e.type === 'deadline').done, true);
+  assert.deepEqual(L.projectSpan({ startedAt: '2026-11-02', status: 'en_cours' }, '2026-11-05'), ['2026-11-02', '2026-11-05']);
+});

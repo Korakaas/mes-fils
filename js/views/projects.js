@@ -191,13 +191,13 @@ export function renderProject(id) {
     <div class="section"><h2>Photos</h2>
       <div class="photos"><button type="button" class="add" data-act="project.photoAdd">${icons.camera}Ajouter</button>${photos}</div>
       <p class="hint" style="margin-top:6px">Photos d’avancement et de résultat.</p></div>
+    ${datesAndTime(p)}
     <div class="section"><h2>Détails</h2><div class="card">
       <div class="kv"><span>Coût estimé</span><span>${ps.count ? (cost.total > 0 ? `${esc(L.fmtEuro(cost.total))}${cost.complete ? '' : ' (prix manquants)'}` : 'Prix des fils à renseigner') : '—'}</span></div>
       ${switchRow('gift-sw', 'C’est un cadeau', !!p.isGift, 'project.toggleGift')}
       ${
         p.isGift
           ? `<form data-submit="project.saveGift" id="gift-form" class="stack" style="margin-top:6px"><div class="field"><label for="g-to">Pour qui</label><input id="g-to" name="giftTo" type="text" value="${esc(p.giftTo || '')}"></div>
-          <div class="field"><label for="g-date">Date limite</label><input id="g-date" name="giftDeadline" type="date" value="${esc(p.giftDeadline || '')}"></div>
           <button type="submit" class="btn small">Enregistrer</button></form>`
           : ''
       }
@@ -206,9 +206,94 @@ export function renderProject(id) {
     <button type="button" class="linkbtn" style="color:var(--bad)" data-act="project.delete">Supprimer ce projet</button>`;
 }
 
+// ---------- Dates et temps de crochet ----------
+
+function datesAndTime(p) {
+  const today = L.todayISO();
+  const dl = L.projectDeadline(p);
+  const dateField = (label, field, value) =>
+    `<div class="field" style="margin:0"><label for="d-${field}">${label}</label><input id="d-${field}" type="date" value="${esc(value || '')}" data-change="project.date" data-field="${field}"></div>`;
+  const span = L.projectSpan(p, today);
+  const days = span ? L.daysBetween(span[0], span[1]) : null;
+  const left = dl && !['termine', 'offert', 'abandonne'].includes(p.status) ? L.daysBetween(today, dl) : null;
+  let dlHint = '';
+  if (left !== null) dlHint = left > 1 ? `Il reste ${left - 1} jour${left - 1 > 1 ? 's' : ''}` : left === 1 ? 'C’est aujourd’hui' : `En retard de ${1 - left} jour${1 - left > 1 ? 's' : ''}`;
+  const minutes = Number(p.workMinutes) || 0;
+  const running = !!p.timerStart;
+  return `<div class="section"><h2>Calendrier</h2><div class="card stack">
+      <div class="row">${dateField('Début', 'startedAt', p.startedAt)}${dateField('Fin', 'finishedAt', p.finishedAt)}</div>
+      ${dateField('Date limite', 'deadline', dl)}
+      ${dlHint ? `<p class="hint" style="margin:0;${left !== null && left < 1 ? 'color:var(--bad);font-weight:700' : ''}">${esc(dlHint)}</p>` : ''}
+      ${days ? `<div class="kv"><span>Durée du projet</span><span>${days} jour${days > 1 ? 's' : ''}${!p.finishedAt && p.status === 'en_cours' ? ' (en cours)' : ''}</span></div>` : '<p class="hint" style="margin:0">Le début se remplit tout seul quand tu passes le projet « En cours », la fin quand tu le termines.</p>'}
+    </div></div>
+    <div class="section"><h2>Temps de crochet</h2><div class="card stack">
+      <div class="kv"><span>Total</span><span id="work-total">${esc(L.fmtDuration(minutes + (running ? Math.max(0, Math.round((Date.now() - p.timerStart) / 60000)) : 0)))}</span></div>
+      ${days && minutes ? `<div class="kv"><span>Moyenne par jour de projet</span><span>${esc(L.fmtDuration(minutes / days))}</span></div>` : ''}
+      <button type="button" class="btn ${running ? 'danger' : 'primary'} block" data-act="project.timer">${running ? '■ Arrêter la séance' : '▶ Commencer une séance'}</button>
+      ${running ? `<p class="hint" style="margin:0;text-align:center">Séance en cours depuis <b id="timer-live">${esc(L.fmtDuration(Math.max(0, Math.round((Date.now() - p.timerStart) / 60000))))}</b></p>` : ''}
+      <div class="row"><button type="button" class="btn small" data-act="project.addTime" data-min="15">+ 15 min</button><button type="button" class="btn small" data-act="project.addTime" data-min="30">+ 30 min</button><button type="button" class="btn small" data-act="project.addTime" data-min="60">+ 1 h</button></div>
+      <button type="button" class="linkbtn" data-act="project.setTime">Corriger le total</button>
+    </div></div>`;
+}
+
+let timerHandle = 0;
+
 export function afterProject() {
   hydratePhotos(document.getElementById('view'));
+  clearInterval(timerHandle);
+  const p = currentProject();
+  if (p && p.timerStart) {
+    timerHandle = setInterval(() => {
+      const cur = document.getElementById('timer-live');
+      if (!cur) return clearInterval(timerHandle);
+      const mins = Math.max(0, Math.round((Date.now() - p.timerStart) / 60000));
+      cur.textContent = L.fmtDuration(mins);
+      const tot = document.getElementById('work-total');
+      if (tot) tot.textContent = L.fmtDuration((Number(p.workMinutes) || 0) + mins);
+    }, 15000);
+  }
 }
+
+/** Ajoute la séance en cours (si elle existe) au temps total. */
+function timerPatch(p) {
+  if (!p.timerStart) return {};
+  const mins = Math.max(1, Math.round((Date.now() - p.timerStart) / 60000));
+  return { workMinutes: (Number(p.workMinutes) || 0) + mins, timerStart: null };
+}
+
+actions['project.timer'] = async () => {
+  const p = currentProject();
+  if (p.timerStart) {
+    await saveProject(timerPatch(p));
+    toast('Séance enregistrée');
+  } else {
+    await saveProject({ timerStart: Date.now() });
+    if (!p.startedAt && p.status !== 'termine') await saveProject({ startedAt: L.todayISO() });
+  }
+  rerender();
+};
+
+actions['project.addTime'] = async (el) => {
+  const p = currentProject();
+  await saveProject({ workMinutes: (Number(p.workMinutes) || 0) + Number(el.dataset.min) });
+  rerender();
+};
+
+actions['project.setTime'] = () => {
+  const p = currentProject();
+  promptSheet({
+    title: 'Corriger le temps total',
+    label: 'Heures de crochet (ex. 12,5)',
+    value: p.workMinutes ? String(+(p.workMinutes / 60).toFixed(2)).replace('.', ',') : '',
+    type: 'number',
+    onConfirm: async (v) => {
+      const h = toNum(v);
+      if (h === null || h < 0) return;
+      await saveProject({ workMinutes: Math.round(h * 60) });
+      rerender();
+    },
+  });
+};
 
 function currentProject() {
   const m = /^#\/projet\/([^/]+)/.exec(location.hash);
@@ -249,12 +334,20 @@ actions['project.toggleGift'] = async () => {
 
 submits['project.saveGift'] = async (form) => {
   const v = Object.fromEntries(new FormData(form));
-  await saveProject({ giftTo: (v.giftTo || '').trim(), giftDeadline: v.giftDeadline || '' });
+  await saveProject({ giftTo: (v.giftTo || '').trim() });
   toast('Cadeau enregistré');
 };
 
 
 export const changes = {
+  'project.date': async (el) => {
+    const field = el.dataset.field;
+    const patch = { [field]: el.value || '' };
+    // la date limite d'un cadeau saisie avant l'existence du champ général est remplacée par la nouvelle
+    if (field === 'deadline') patch.giftDeadline = '';
+    await saveProject(patch);
+    rerender();
+  },
   'project.notes': async (el) => {
     await saveProject({ notes: el.value.trim() });
   },
@@ -377,7 +470,10 @@ actions['project.status'] = async (el) => {
     openFinishSheet(p, next, d);
     return;
   }
-  await saveProject({ status: next });
+  const patch = { status: next, ...timerPatch(p) };
+  if (next === 'en_cours' && !p.startedAt) patch.startedAt = L.todayISO();
+  if (['termine', 'offert'].includes(next) && !p.finishedAt) patch.finishedAt = L.todayISO();
+  await saveProject(patch);
   if (next === 'en_cours') {
     const ps = L.projectStatus({ ...p, status: 'en_cours' }, d.yarnsById, d.projects, d.settings.margin);
     if (ps.states.some((s) => s.conflict)) toast('Attention : certains fils sont déjà réservés par un autre projet');
@@ -424,7 +520,7 @@ submits['project.finish'] = async (form) => {
     const w = toNum(v[`w_${yarnId}`]);
     await store.put('yarns', L.finishConsumption(y, g, w, d.settings.restThreshold));
   }
-  await saveProject({ status: next, consumed: true });
+  await saveProject({ status: next, consumed: true, ...timerPatch(p), finishedAt: p.finishedAt || L.todayISO() });
   toast('Stock mis à jour');
   rerender();
 };

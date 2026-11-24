@@ -338,3 +338,85 @@ export function uid() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
   return 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
+
+// ---------- Dates et temps (calendrier des projets) ----------
+
+const pad2 = (x) => String(x).padStart(2, '0');
+
+/** Date locale du jour au format AAAA-MM-JJ. */
+export function todayISO(now = new Date()) {
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+}
+
+/** AAAA-MM-JJ → Date locale à midi (évite les décalages d'heure d'été). */
+export function parseISO(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12) : null;
+}
+
+export function addDays(iso, days) {
+  const d = parseISO(iso);
+  d.setDate(d.getDate() + days);
+  return todayISO(d);
+}
+
+/** Nombre de jours entre deux dates, premier et dernier jour compris (début = fin → 1 jour). */
+export function daysBetween(fromISO, toISO) {
+  const a = parseISO(fromISO);
+  const b = parseISO(toISO);
+  if (!a || !b) return null;
+  return Math.round((b - a) / 86400000) + 1;
+}
+
+/** 150 → « 2 h 30 », 45 → « 45 min », 0 → « 0 min ». */
+export function fmtDuration(minutes) {
+  const m = Math.max(0, Math.round(n(minutes)));
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  if (!h) return `${r} min`;
+  return r ? `${h} h ${pad2(r)}` : `${h} h`;
+}
+
+/** Date limite d'un projet : champ « deadline », ou l'ancienne date limite de cadeau. */
+export function projectDeadline(p) {
+  return p.deadline || p.giftDeadline || '';
+}
+
+/** Événements d'un projet pour le calendrier : début, fin, date limite. */
+export function projectEvents(projects) {
+  const out = [];
+  for (const p of projects) {
+    if (p.deleted) continue;
+    if (p.startedAt) out.push({ date: p.startedAt, type: 'start', projectId: p.id, name: p.name });
+    if (p.finishedAt) out.push({ date: p.finishedAt, type: 'end', projectId: p.id, name: p.name });
+    const dl = projectDeadline(p);
+    if (dl) out.push({ date: dl, type: 'deadline', projectId: p.id, name: p.name, done: ['termine', 'offert'].includes(p.status) });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** Période d'un projet : du début à la fin, ou jusqu'à aujourd'hui s'il est en cours. */
+export function projectSpan(p, today = todayISO()) {
+  if (!p.startedAt) return null;
+  const end = p.finishedAt || (p.status === 'en_cours' ? today : null);
+  return end && end >= p.startedAt ? [p.startedAt, end] : [p.startedAt, p.startedAt];
+}
+
+/** Semaines (lundi en premier) d'un mois : tableaux de 7 dates AAAA-MM-JJ, avec les jours voisins du mois. */
+export function monthGrid(year, month) {
+  const first = new Date(year, month, 1, 12);
+  const offset = (first.getDay() + 6) % 7; // lundi = 0
+  const start = new Date(year, month, 1 - offset, 12);
+  const weeks = [];
+  const cur = new Date(start);
+  for (let w = 0; w < 6; w++) {
+    const week = [];
+    for (let i = 0; i < 7; i++) {
+      week.push(todayISO(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+    if (w >= 4 && week[0].slice(0, 7) > `${year}-${pad2(month + 1)}`) break;
+    weeks.push(week);
+  }
+  return weeks;
+}
