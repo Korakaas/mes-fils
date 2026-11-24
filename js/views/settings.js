@@ -59,7 +59,7 @@ export function renderSettings() {
     ${store.isMemoryOnly() ? `<div class="banner warn" style="margin-top:14px">${icons.alert}<span>Le stockage de ce navigateur est bloqué : les données seront perdues à la fermeture.</span></div>` : ''}
     <button type="button" class="btn block" style="margin-top:18px" data-act="settings.refresh">Mettre à jour l’appli</button>
     <p class="hint" style="margin:8px 0 0;text-align:center">Recharge les derniers fichiers. Tes fils et projets ne sont pas touchés.</p>
-    <p class="hint" style="margin:14px 0 0;text-align:center">Mes fils · version 7</p>`;
+    <p class="hint" style="margin:14px 0 0;text-align:center">Mes fils · version 8</p>`;
 }
 
 submits['settings.save'] = async (form) => {

@@ -227,7 +227,8 @@ export function candidatesForSlot(slot, yarns, projects, opts = {}) {
     const remaining = remainingGrams(y);
     const available = availableGrams(y, projects, projectId);
     const sameWeight = !!slot.weightCategory && slot.weightCategory === y.weightCategory;
-    return { yarn: y, need, needM, remaining, available, sameWeight };
+    const sameColor = !!slot.colorKey && slot.colorKey === y.colorKey;
+    return { yarn: y, need, needM, remaining, available, sameWeight, sameColor };
   });
   const enough = [];
   const insufficient = [];
@@ -242,7 +243,7 @@ export function candidatesForSlot(slot, yarns, projects, opts = {}) {
       insufficient.push({ ...r, reason: 'short', short: r.needM - r.available });
     }
   }
-  enough.sort((a, b) => Number(b.sameWeight) - Number(a.sameWeight) || a.leftover - b.leftover);
+  enough.sort((a, b) => Number(b.sameWeight) - Number(a.sameWeight) || Number(b.sameColor) - Number(a.sameColor) || a.leftover - b.leftover);
   insufficient.sort((a, b) => (a.short ?? 1e9) - (b.short ?? 1e9));
 
   const combine = [];

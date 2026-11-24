@@ -263,7 +263,12 @@ function materialRow(m, i, d) {
   if (m.kind === 'yarn') {
     const wOpts = ['<option value="">Épaisseur ?</option>', ...L.WEIGHTS.map((w) => `<option ${m.weightCategory === w ? 'selected' : ''}>${w}</option>`)].join('');
     return `<div class="card mat" data-row="${i}">${base}${head}
-      ${field('Description', 'label', m.label, { ph: 'ex. Coton worsted blanc' })}
+      ${field('Description', 'label', m.label, { ph: 'ex. Coton worsted, ou marque du fil' })}
+      ${field('Coloris', 'colorName', m.colorName, { ph: 'ex. 001 blanc' })}
+      <input type="hidden" name="colorKey" value="${esc(m.colorKey || '')}">
+      <div class="colors" role="group" aria-label="Famille de couleur">${L.COLORS.map(
+        (c) => `<button type="button" class="dot" aria-label="${esc(c.label)}" aria-pressed="${m.colorKey === c.key}" data-act="pattern.color" data-value="${c.key}" style="${c.hex.startsWith('linear') ? `background:${c.hex}` : `background-color:${c.hex}`}"></button>`,
+      ).join('')}</div>
       <div class="field" style="margin:0"><label>Épaisseur<select name="weightCategory" data-input="pattern.row" style="margin-top:4px">${wOpts}</select></label></div>
       <div class="row">${field('Poids total (g)', 'grams', m.grams, { type: 'num' })}${field('Mètres total', 'meters', m.meters, { type: 'num' })}</div>
       <div class="row">${field('Pelotes', 'skeins', m.skeins, { type: 'num' })}${field('g / pelote', 'skeinGrams', m.skeinGrams, { type: 'num' })}${field('m / pelote', 'skeinMeters', m.skeinMeters, { type: 'num' })}</div>
@@ -282,6 +287,8 @@ function collectRows(form) {
     const m = { id: get('id') || L.uid(), kind, label: get('label').trim() };
     if (kind === 'yarn') {
       m.weightCategory = get('weightCategory');
+      m.colorName = get('colorName').trim();
+      m.colorKey = get('colorKey');
       for (const k of ['grams', 'meters', 'skeins', 'skeinGrams', 'skeinMeters']) m[k] = toNum(get(k));
     }
     if (kind === 'hook') m.size = toNum(get('size'));
@@ -328,6 +335,15 @@ actions['pattern.addRow'] = (el) => {
     cur.materials.push(blank);
     rerender();
   }
+};
+
+actions['pattern.color'] = (el) => {
+  const row = el.closest('[data-row]');
+  const hidden = row.querySelector('[name="colorKey"]');
+  const already = el.getAttribute('aria-pressed') === 'true';
+  el.parentElement.querySelectorAll('.dot').forEach((c) => c.setAttribute('aria-pressed', 'false'));
+  hidden.value = already ? '' : el.dataset.value;
+  if (!already) el.setAttribute('aria-pressed', 'true');
 };
 
 actions['pattern.delRow'] = (el) => {
@@ -503,6 +519,8 @@ export function slotsFromPattern(p) {
       id: L.uid(),
       kind: 'yarn',
       label: m.label || 'Fil',
+      colorName: m.colorName || '',
+      colorKey: m.colorKey || '',
       weightCategory: m.weightCategory || '',
       grams: m.grams ?? null,
       meters: m.meters ?? null,

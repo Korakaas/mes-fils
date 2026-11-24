@@ -107,6 +107,8 @@ function allocRow(slotId, a, d, projectId) {
     <button type="button" class="iconbtn ghost" style="width:36px;height:36px" aria-label="Retirer ce fil" data-act="project.unalloc" data-slot="${esc(slotId)}" data-yarn="${esc(a.yarnId)}">${icons.close}</button></div>`;
 }
 
+const slotTitle = (s) => `${s.label || 'Fil'}${s.colorName ? ` · ${s.colorName}` : ''}`;
+
 function slotCard(s, d, p) {
   const st = L.slotStatus(s, d.yarnsById, d.projects, p, d.settings.margin);
   let pillHtml;
@@ -116,7 +118,7 @@ function slotCard(s, d, p) {
   else if (st.conflict) pillHtml = '<span class="pill bad">Déjà réservé</span>';
   else pillHtml = `<span class="pill bad">Il manque ${esc(L.fmtGrams(st.shortfall))}</span>`;
   const need = st.needMargin !== null ? `Besoin ${L.fmtGrams(st.need)}, soit ${L.fmtGrams(st.needMargin)} avec marge` : 'Ajoute un poids ou des mètres pour comparer';
-  return `<div class="card slot"><div class="head"><div><div class="label">${esc(s.label || 'Fil')}</div><div class="need">${esc(need)}${s.weightCategory ? ` · ${esc(s.weightCategory)}` : ''}</div></div>${pillHtml}</div>
+  return `<div class="card slot"><div class="head"><div><div class="label">${esc(slotTitle(s))}</div><div class="need">${esc(need)}${s.weightCategory ? ` · ${esc(s.weightCategory)}` : ''}</div></div>${pillHtml}</div>
     ${(s.allocations || []).map((a) => allocRow(s.id, a, d, p.id)).join('')}
     <div class="row"><a class="btn small" href="#/projet/${esc(p.id)}/choisir/${esc(s.id)}">${(s.allocations || []).length ? 'Changer de fil' : 'Choisir un fil'}</a>
     <button type="button" class="btn small" data-act="project.slotMenu" data-slot="${esc(s.id)}">Modifier la ligne</button></div></div>`;
@@ -260,6 +262,7 @@ actions['project.slotMenu'] = (el) => {
     html: `<h2>Modifier la ligne</h2>
       <form data-submit="project.saveSlot" data-slot="${esc(s.id)}" class="stack">
         <div class="field"><label for="s-label">Description</label><input id="s-label" name="label" type="text" value="${esc(s.label || '')}"></div>
+        <div class="field"><label for="s-colorname">Coloris</label><input id="s-colorname" name="colorName" type="text" value="${esc(s.colorName || '')}" placeholder="ex. 001 blanc"></div>
         <div class="field"><label for="s-weight">Épaisseur</label><select id="s-weight" name="weightCategory"><option value="">Peu importe</option>${L.WEIGHTS.map((w) => `<option ${s.weightCategory === w ? 'selected' : ''}>${w}</option>`).join('')}</select></div>
         <div class="row"><div class="field"><label for="s-grams">Besoin (g)</label><input id="s-grams" name="grams" type="text" inputmode="decimal" value="${esc(numStr(s.grams))}"></div>
         <div class="field"><label for="s-meters">Besoin (m)</label><input id="s-meters" name="meters" type="text" inputmode="decimal" value="${esc(numStr(s.meters))}"></div></div>
@@ -272,7 +275,7 @@ submits['project.saveSlot'] = async (form) => {
   const v = Object.fromEntries(new FormData(form));
   const p = currentProject();
   const slots = (p.slots || []).map((s) =>
-    s.id === form.dataset.slot ? { ...s, label: (v.label || '').trim() || 'Fil', weightCategory: v.weightCategory || '', grams: toNum(v.grams), meters: toNum(v.meters), skeins: null } : s,
+    s.id === form.dataset.slot ? { ...s, label: (v.label || '').trim() || 'Fil', colorName: (v.colorName || '').trim(), weightCategory: v.weightCategory || '', grams: toNum(v.grams), meters: toNum(v.meters), skeins: null } : s,
   );
   closeSheet();
   await saveProject({ slots });
@@ -437,7 +440,7 @@ export function renderChoose(projectId, slotId) {
     return `<button type="button" class="pick" aria-pressed="${on}" data-act="choose.toggle" data-ids="${esc(ids.join(','))}"><span class="box"></span><span class="grow"><span class="t">${title}</span><span class="s">${sub}</span></span>${pillHtml || ''}</button>`;
   };
   const enough = res.enough.map((r) =>
-    pickRow([r.yarn.id], esc(label(r)), `${esc(L.fmtGrams(r.available))} disponibles · ${esc(r.sameWeight ? 'Même épaisseur' : r.yarn.weightCategory ? `Autre épaisseur (${r.yarn.weightCategory})` : 'Épaisseur non précisée')} · reste ${esc(L.fmtGrams(r.leftover))}`),
+    pickRow([r.yarn.id], esc(label(r)), `${esc(L.fmtGrams(r.available))} disponibles · ${esc(r.sameWeight ? 'Même épaisseur' : r.yarn.weightCategory ? `Autre épaisseur (${r.yarn.weightCategory})` : 'Épaisseur non précisée')}${r.sameColor ? ' · Même couleur' : ''} · reste ${esc(L.fmtGrams(r.leftover))}`),
   );
   const combine = res.combine.map((c) =>
     pickRow(c.yarns.map((r) => r.yarn.id), c.yarns.map((r) => esc(label(r))).join(' + '), `${c.yarns.map((r) => esc(L.fmtGrams(r.available))).join(' + ')} = ${esc(L.fmtGrams(c.sum))} · reste ${esc(L.fmtGrams(c.leftover))}`),
@@ -458,7 +461,7 @@ export function renderChoose(projectId, slotId) {
   const chip = (key, text, n) => `<button type="button" class="chip" aria-pressed="${n > 0}" data-act="choose.filter" data-key="${key}">${text}${n ? ` · ${n}` : ''}</button>`;
   return `
     ${topbar('Choisir un fil', { backHref: `#/projet/${p.id}` })}
-    <div class="card"><div style="font-weight:800">${esc(slot.label || 'Fil')}${slot.weightCategory ? ` · ${esc(slot.weightCategory)}` : ''}</div><div class="hint">${esc(needLine)}</div></div>
+    <div class="card"><div style="font-weight:800">${esc(slotTitle(slot))}${slot.weightCategory ? ` · ${esc(slot.weightCategory)}` : ''}</div><div class="hint">${esc(needLine)}</div></div>
     <div class="chips" style="margin-top:10px" role="group" aria-label="Filtres">${chip('weights', 'Épaisseur', f.weights.length)}${chip('materials', 'Matière', f.materials.length)}${chip('colors', 'Couleur', f.colors.length)}
       ${nFilter ? '<button type="button" class="chip" data-act="choose.clear">Effacer</button>' : ''}</div>
     <p class="hint" style="margin-top:-4px">Aucun filtre n’est obligatoire.</p>

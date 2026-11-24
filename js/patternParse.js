@@ -37,6 +37,29 @@ function num(s) {
   return parseFloat(String(s).replace(',', '.'));
 }
 
+const COLOUR_WORDS = [
+  [/\b(multi|multicolor|multicolore|arc-en-ciel|rainbow)\b/i, 'multi'],
+  [/\b(blanc|blanche|white|ecru|écru|cr[èe]me|cream|ivoire|ivory)\b/i, 'blanc'],
+  [/\b(beige|sable|sand|lin|naturel|natural|nude|camel)\b/i, 'beige'],
+  [/\b(jaune|yellow|moutarde|mustard|citron|lemon|miel|honey)\b/i, 'jaune'],
+  [/\b(orange|abricot|apricot|corail|coral|p[êe]che|peach|mandarine)\b/i, 'orange'],
+  [/\b(rouge|red|brique|bordeaux|burgundy|tomate|tomato|cerise|cherry)\b/i, 'rouge'],
+  [/\b(rose|pink|fuchsia|framboise|raspberry|blush)\b/i, 'rose'],
+  [/\b(violet|purple|mauve|lilas|lilac|lavande|lavender|prune|plum)\b/i, 'violet'],
+  [/\b(bleu|blue|marine|navy|turquoise|ciel|denim|cobalt)\b/i, 'bleu'],
+  [/\b(vert|green|menthe|mint|sauge|sage|olive|kaki|khaki|ivy|fir)\b/i, 'vert'],
+  [/\b(marron|brun|brown|chocolat|chocolate|caf[ée]|coffee|taupe|caramel|noisette|chestnut|ch[âa]taigne|cannelle)\b/i, 'marron'],
+  [/\b(gris|gray|grey|anthracite|argent|silver|souris)\b/i, 'gris'],
+  [/\b(noir|black)\b/i, 'noir'],
+];
+
+/** Devine la famille de couleur (clé de L.COLORS) d'un nom de coloris ; '' si incertain. */
+export function guessColorKey(text) {
+  const t = String(text || '');
+  for (const [re, key] of COLOUR_WORDS) if (re.test(t)) return key;
+  return '';
+}
+
 export function detectWeight(line) {
   for (const [re, name] of WEIGHT_WORDS) if (re.test(line)) return name;
   return '';
@@ -165,7 +188,8 @@ function readRows(lines, idxs) {
     const code = brand && l.match(COLOUR_CODE);
     if (code) {
       const letter = code[3] ? ` (${code[3].toUpperCase()})` : '';
-      out.push({ kind: 'yarn', label: `${brand} – ${code[1]} ${code[2].trim()}${letter}`, weightCategory: detectWeight(brand) });
+      const colorName = `${code[1]} ${code[2].trim()}${letter}`;
+      out.push({ kind: 'yarn', label: brand, colorName, colorKey: guessColorKey(code[2]), weightCategory: detectWeight(brand) });
       fresh = false;
       continue;
     }
@@ -281,7 +305,7 @@ function guessTitle(lines) {
 function dedupe(list) {
   const seen = new Set();
   return list.filter((m) => {
-    const key = m.kind + '|' + m.label.toLowerCase();
+    const key = m.kind + '|' + m.label.toLowerCase() + '|' + String(m.colorName || '').toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

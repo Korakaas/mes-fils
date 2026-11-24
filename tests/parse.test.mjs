@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyVariant, parsePattern, parseQuantities, detectWeight } from '../js/patternParse.js';
+import { applyVariant, parsePattern, parseQuantities, detectWeight, guessColorKey } from '../js/patternParse.js';
 
 const FR = `Mushroom Guy
 Amigurumi au crochet
@@ -149,13 +149,24 @@ ml: maille en lair`;
   const r = parsePattern(text);
   const yarns = r.materials.filter((m) => m.kind === 'yarn');
   assert.equal(yarns.length, 5);
-  assert.ok(yarns[0].label.startsWith('Ricorumi'));
-  assert.ok(yarns[0].label.includes('001 blanc'));
-  assert.ok(yarns[2].label.startsWith('Scheepjes Catona (pour le personnage)'));
-  assert.ok(yarns[2].label.includes('(B)'));
+  assert.equal(yarns[0].label, 'Ricorumi (pour la base)');
+  assert.equal(yarns[0].colorName, '001 blanc');
+  assert.equal(yarns[0].colorKey, 'blanc');
+  assert.equal(yarns[1].colorName, '052 brun clair');
+  assert.equal(yarns[1].colorKey, 'marron');
+  assert.equal(yarns[2].label, 'Scheepjes Catona (pour le personnage)');
+  assert.equal(yarns[2].colorName, '105 blanc (B)');
+  assert.equal(yarns[3].colorKey, 'rouge');
+  assert.equal(yarns[4].colorKey, 'marron');
   assert.deepEqual(r.materials.filter((m) => m.kind === 'hook').map((h) => h.size), [3, 2.5]);
   const acc = r.materials.filter((m) => m.kind === 'accessory').map((a) => a.label);
   assert.equal(acc.length, 2);
   assert.ok(acc.some((a) => /broder/i.test(a)) && acc.some((a) => /rembourrage/i.test(a)));
   assert.ok(!r.materials.some((m) => /chaînette|maille/i.test(m.label)));
+});
+
+test('famille de couleur devinée depuis le nom du coloris', () => {
+  assert.equal(guessColorKey('Rose Water'), 'rose');
+  assert.equal(guessColorKey('Taupe'), 'marron');
+  assert.equal(guessColorKey('Zzz'), '');
 });
