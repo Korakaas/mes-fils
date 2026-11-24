@@ -18,7 +18,7 @@ function route() {
   if (h === '#/fil/nouveau') return { name: 'yarn-form', nav: null, html: () => renderYarnForm(null), after: afterYarnForm };
   if ((m = /^#\/fil\/([^/]+)\/modifier$/.exec(h))) return { name: 'yarn-form', nav: null, html: () => renderYarnForm(m[1]), after: afterYarnForm };
   if ((m = /^#\/fil\/([^/]+)$/.exec(h))) return { name: 'yarn', nav: 'stock', html: () => renderYarn(m[1]), after: () => {} };
-  if (h === '#/patrons') return { name: 'patterns', nav: 'patrons', html: renderPatterns, after: afterPatterns };
+  if (h === '#/patrons') return { name: 'patterns', nav: 'projets', html: renderPatterns, after: afterPatterns };
   if (h === '#/patron/nouveau') return { name: 'pattern-new', nav: null, html: renderPatternNew, after: () => {} };
   if ((m = /^#\/patron\/([^/]+)$/.exec(h))) return { name: 'pattern', nav: null, html: () => renderPatternEditor(m[1]), after: afterPatterns };
   if ((m = /^#\/lire\/([^/]+)(?:\/([^/]+))?$/.exec(h))) return { name: 'reader', nav: null, html: () => renderReader(m[1], m[2]), after: afterReader };
@@ -36,6 +36,7 @@ let current = route();
 
 function render() {
   const hash = location.hash || '#/';
+  if (!/^#\/(patron|lire)\//.test(hash)) ui.patternBack = null;
   current = route();
   const y = window.scrollY;
   try {

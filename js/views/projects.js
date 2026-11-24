@@ -44,7 +44,8 @@ export function renderProjects() {
   return `
     <div class="topbar"><h1>Mes projets</h1></div>
     <div class="chips" role="group" aria-label="Filtrer par statut">${chips}</div>
-    ${list.length ? `<div class="stack">${rows}</div>` : emptyState(icons.folder, d.projects.length ? 'Aucun projet avec ce statut.' : 'Pas encore de projet. Crée-en un à partir d’un patron ou à partir de ton stock.', '<a class="btn primary" href="#/projet/nouveau">Nouveau projet</a>')}
+    ${list.length ? `<div class="stack">${rows}</div>` : emptyState(icons.folder, d.projects.length ? 'Aucun projet avec ce statut.' : 'Pas encore de projet. Importe un patron (PDF ou photos) pour en démarrer un.', '<a class="btn primary" href="#/projet/nouveau">Nouveau projet</a>')}
+    ${d.patterns.length ? `<p style="text-align:center;margin:18px 0 0"><a class="linkbtn" href="#/patrons">Mes patrons enregistrés (${d.patterns.length})</a></p>` : ''}
     <a class="fab" href="#/projet/nouveau">${icons.plus}Nouveau projet</a>`;
 }
 
@@ -62,17 +63,51 @@ actions['projects.filter'] = (el) => {
 export function renderProjectNew() {
   const d = data();
   const pats = [...d.patterns].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const again = pats.length
+    ? `<div class="section"><h2>Refaire un patron déjà utilisé</h2><div class="stack">${pats
+        .map(
+          (pt) => `<button type="button" class="listrow" style="width:100%;text-align:left;font:inherit;color:inherit" data-act="project.fromPattern" data-id="${esc(pt.id)}"><span class="thumb" ${pt.photoId ? photoAttrs(pt.photoId, '') : ''}>${pt.photoId ? '' : icons.doc}</span>
+          <span class="grow"><span class="t">${esc(pt.title || 'Patron sans titre')}</span><span class="s">Mêmes instructions et même matériel</span></span><span class="chev">${icons.chev}</span></button>`,
+        )
+        .join('')}</div></div>`
+    : '';
   return `
     ${topbar('Nouveau projet', { backHref: '#/projets' })}
-    <form data-submit="project.create" class="stack">
-      <div class="field"><label for="np-name">Nom du projet</label><input id="np-name" name="name" type="text" autocomplete="off" placeholder="ex. Plaid du salon"></div>
-      <div class="field"><label for="np-pattern">Patron</label><select id="np-pattern" name="patternId"><option value="">Sans patron pour l’instant</option>${pats
-        .map((p) => `<option value="${esc(p.id)}">${esc(p.title)}</option>`)
-        .join('')}</select>
-        <span class="hint">Avec un patron, les fils demandés sont repris dans le projet.</span></div>
-      <button class="btn primary block" type="submit">Créer le projet</button>
-    </form>`;
+    <div class="stack">
+      <button type="button" class="btn primary block" style="min-height:64px" data-act="pattern.pickPdf">${icons.doc}Importer un PDF</button>
+      <p class="hint">L’appli lit le texte du PDF et en tire le matériel : fils, crochets, accessoires. Tu relis et tu corriges avant de créer le projet.</p>
+      <button type="button" class="btn block" data-act="pattern.pickImage">${icons.camera}Photos ou captures du patron</button>
+      <p class="hint">Plusieurs images possibles : l’appli lit le matériel dessus et tu pourras remettre les pages dans l’ordre.</p>
+      <button type="button" class="btn block" data-act="pattern.manual">Saisir le patron à la main</button>
+    </div>
+    <div id="pattern-busy" class="spinner" hidden>Lecture du patron…</div>
+    ${again}
+    <div class="section"><h2>Sans patron</h2>
+      <form data-submit="project.create" class="stack">
+        <div class="field"><label for="np-name">Nom du projet</label><input id="np-name" name="name" type="text" autocomplete="off" placeholder="ex. Plaid du salon"></div>
+        <button class="btn block" type="submit">Créer le projet sans patron</button>
+      </form></div>`;
 }
+
+actions['project.fromPattern'] = async (el) => {
+  const pattern = store.get('patterns', el.dataset.id);
+  if (!pattern) return;
+  const p = await store.put('projects', {
+    name: pattern.title || 'Projet',
+    status: 'envie',
+    patternId: pattern.id,
+    keepReservedOnPause: true,
+    slots: slotsFromPattern(pattern),
+    photos: [],
+  });
+  toast('Projet créé');
+  go(`#/projet/${p.id}`);
+};
+
+actions['project.editPattern'] = (el) => {
+  ui.patternBack = `#/projet/${el.dataset.pid}`;
+  go(`#/patron/${el.dataset.id}`);
+};
 
 submits['project.create'] = async (form) => {
   const v = Object.fromEntries(new FormData(form));
@@ -140,7 +175,9 @@ export function renderProject(id) {
   const photos = (p.photos || []).map((ph, i) => `<button type="button" class="ph" aria-label="Voir la photo ${i + 1}" data-act="project.photoOpen" data-idx="${i}" ${photoAttrs(ph, '')}></button>`).join('');
   const patternCard = pattern
     ? `<a class="listrow" href="#/lire/${esc(pattern.id)}/${esc(p.id)}" aria-label="Ouvrir les instructions du patron ${esc(pattern.title)}"><span class="thumb">${icons.doc}</span>
-        <span class="grow"><span class="t">Patron · ${esc(pattern.title)}</span><span class="s">${(() => { const n = patternFiles(pattern).length; return n ? `${n} fichier${n > 1 ? 's' : ''} · ` : ''; })()}ouvrir les instructions</span></span><span class="chev">${icons.chev}</span></a>`
+        <span class="grow"><span class="t">Instructions · ${esc(pattern.title)}</span><span class="s">${(() => { const n = patternFiles(pattern).length; return n ? `${n} fichier${n > 1 ? 's' : ''} · ` : ''; })()}ouvrir les instructions</span></span><span class="chev">${icons.chev}</span></a>
+      <div class="row" style="margin-top:8px"><button type="button" class="btn small" data-act="project.editPattern" data-id="${esc(pattern.id)}" data-pid="${esc(p.id)}">Pages et matériel</button>
+      <button type="button" class="btn small" data-act="project.fromPattern" data-id="${esc(pattern.id)}">Refaire ce patron</button></div>`
     : `<button type="button" class="btn block" data-act="project.linkPattern">Lier un patron</button>`;
   return `
     ${topbar(p.name, { backHref: '#/projets', right: `<button type="button" class="linkbtn" data-act="project.rename">Renommer</button>` })}

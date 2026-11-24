@@ -8,7 +8,7 @@ retrouver la même chose sur l'ordinateur.
 ## Ce que fait l'appli
 
 - **Stock** : fils avec couleur, matière, épaisseur, pelotes, poids, métrage, boîte, photo. Filtres, tri, recherche, pesée du reste.
-- **Patrons** : import d'un PDF ou de photos (lecture automatique du matériel : fils, crochets, accessoires, tailles du patron), ou saisie rapide. Un patron garde plusieurs fichiers (PDF et photos, 50 Mo max par PDF) qui se lisent dans l'appli, écran allumé, y compris depuis le projet.
+- **Projets et patrons** : on part toujours d'un « Nouveau projet » (import d'un PDF ou de photos (lecture automatique du matériel : fils, crochets, accessoires, tailles du patron), ou saisie rapide. Un patron garde plusieurs fichiers (PDF et photos, 50 Mo max par PDF) qui se lisent dans l'appli en livret (page par page) ou en défilement, écran allumé. Le patron s'enregistre tout seul avec le projet ; « Refaire ce patron » en crée un nouveau sans rien réimporter.
 - **Projets** : un projet = un patron + des fils choisis. L'appli calcule le besoin avec marge (10 %, réglable), propose les fils en stock suffisants ou à combiner, réserve les fils, et indique « Assez / Il manque / À choisir ».
 - **En pause** : un interrupteur par projet décide si les fils restent réservés.
 - **Fin de projet** : tu pèses ce qui reste ; un reste de moins de 20 g sort du stock (seuil réglable). Coût du projet calculé avec le prix des fils.

@@ -22,9 +22,9 @@ export function renderPatterns() {
     })
     .join('');
   return `
-    <div class="topbar"><h1>Mes patrons</h1></div>
-    ${list.length ? `<div class="stack">${rows}</div>` : emptyState(icons.doc, 'Aucun patron pour l’instant. Importe un PDF : l’appli lit le matériel et le compare à ton stock.', '<a class="btn primary" href="#/patron/nouveau">Importer un patron</a>')}
-    <a class="fab" href="#/patron/nouveau">${icons.plus}Importer un patron</a>`;
+    ${topbar('Mes patrons', { backHref: '#/projets' })}
+    <p class="hint" style="margin-top:0">Un patron s’enregistre tout seul quand tu crées un projet. Ouvre-en un pour en démarrer un nouveau projet.</p>
+    ${list.length ? `<div class="stack">${rows}</div>` : emptyState(icons.doc, 'Aucun patron pour l’instant. Il apparaîtra ici dès que tu auras créé un projet avec un patron.', '<a class="btn primary" href="#/projet/nouveau">Nouveau projet</a>')}`;
 }
 
 // ---------- Import ----------
@@ -157,11 +157,12 @@ export function renderPatternEditor(id) {
   const files = patternFiles(p);
   const hasFile = files.length > 0 || !!p.link;
   return `
-    ${topbar(isDraft ? 'Nouveau patron' : 'Patron', { backHref: '#/patrons' })}
+    ${topbar(isDraft ? 'Nouveau projet' : 'Patron', { backHref: isDraft ? '#/projet/nouveau' : ui.patternBack || '#/patrons' })}
     <form id="pattern-form" data-submit="pattern.save" data-id="${isDraft ? '' : esc(p.id)}" novalidate>
-      <div class="field"><label for="p-title">Titre</label><input id="p-title" name="title" type="text" value="${esc(p.title || '')}" placeholder="ex. Mushroom Guy" autocomplete="off"></div>
+      <div class="field"><label for="p-title">${isDraft ? 'Nom du projet' : 'Titre du patron'}</label><input id="p-title" name="title" type="text" value="${esc(p.title || '')}" placeholder="ex. Mushroom Guy" autocomplete="off"></div>
       ${filesSection(files, isDraft ? 'brouillon' : p.id)}
       <div class="field"><label for="p-link">Lien du patron (facultatif)</label><input id="p-link" name="link" type="url" value="${esc(p.link || '')}" placeholder="https://"></div>
+      ${!isDraft && ui.patternBack ? `<div class="banner info" style="margin-bottom:12px">${icons.info}<span>Les fils déjà dans ton projet ne changent pas<span class="sub">Ici tu modifies le patron (pages, matériel). Pour un fil du projet, utilise « Modifier la ligne » dans le projet.</span></span></div>` : ''}
       ${p.readNote ? `<div class="banner warn" style="margin-bottom:12px">${icons.alert}<span>${esc(p.readNote)}</span></div>` : ''}
       ${p.fromRead ? `<div class="banner warn" style="margin-bottom:12px">${icons.alert}<span>À vérifier<span class="sub">L’appli a lu ces lignes dans le patron : vérifie surtout les chiffres.</span></span></div>` : ''}
       ${variantChips(p)}
@@ -174,8 +175,8 @@ export function renderPatternEditor(id) {
       <div class="field section"><label for="p-notes">Notes</label><textarea id="p-notes" name="notes">${esc(p.notes || '')}</textarea></div>
       ${!isDraft ? `<button type="button" class="linkbtn" style="color:var(--bad)" data-act="pattern.delete" data-id="${esc(p.id)}">Supprimer ce patron</button>` : ''}
       <div class="footer-actions"><div class="row">
-        <button type="submit" class="btn block" data-after="save">Enregistrer le patron</button>
-        <button type="submit" class="btn primary block" data-after="project">Créer le projet</button></div>
+        ${isDraft ? '' : '<button type="submit" class="btn block" data-after="save">Enregistrer</button>'}
+        <button type="submit" class="btn primary block" data-after="project">${isDraft ? 'Créer le projet' : 'Nouveau projet avec ce patron'}</button></div>
         ${hasFile ? '' : '<p class="hint">Un patron sans fichier ni lien reste utile pour comparer le matériel à ton stock.</p>'}</div>
     </form>`;
 }
@@ -620,7 +621,7 @@ submits['pattern.save'] = async (form) => {
   const base = id ? store.get('patterns', id) : ui.draftPattern || {};
   const cur = currentPatternFromForm(form, base);
   if (!cur.title) {
-    toast('Donne un titre au patron');
+    toast(id ? 'Donne un titre au patron' : 'Donne un nom au projet');
     document.getElementById('p-title').focus();
     return;
   }
@@ -638,7 +639,7 @@ submits['pattern.save'] = async (form) => {
   };
   const saved = await store.put('patterns', doc);
   ui.draftPattern = null;
-  if (lastSubmitter === 'project') {
+  if (!id || lastSubmitter === 'project') {
     const project = await store.put('projects', {
       name: saved.title,
       status: 'envie',
@@ -651,7 +652,9 @@ submits['pattern.save'] = async (form) => {
     go(`#/projet/${project.id}`);
   } else {
     toast('Patron enregistré');
-    go(`#/patron/${saved.id}`);
+    const back = ui.patternBack;
+    ui.patternBack = null;
+    go(back || `#/patron/${saved.id}`);
   }
   lastSubmitter = 'save';
 };
