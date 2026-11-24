@@ -1,9 +1,9 @@
 import * as store from '../store.js';
 import * as L from '../logic.js';
 import { parsePattern, applyVariant } from '../patternParse.js';
-import { extractPdfText, renderPdf, shrinkImage } from '../media.js';
+import { extractPdfText, renderPdf, shrinkImage, ocrImages } from '../media.js';
 import {
-  ui, actions, inputs, submits, esc, icons, topbar, data, go, toast, confirmSheet, pickFile, pickFiles, patternFiles, toNum, numStr, yarnTitle, emptyState, photoAttrs, hydratePhotos, rerender,
+  ui, actions, inputs, submits, esc, icons, topbar, data, go, toast, confirmSheet, pickFile, pickFiles, patternFiles, toastHold, toNum, numStr, yarnTitle, emptyState, photoAttrs, hydratePhotos, rerender,
 } from '../ctx.js';
 
 // ---------- Liste ----------
@@ -89,8 +89,10 @@ actions['pattern.pickImage'] = async () => {
   if (!picked.length) return;
   setBusy(true, 'Enregistrement des photos…');
   try {
-    const files = await storeImages(picked);
-    ui.draftPattern = { title: '', files, materials: [], readNote: '', fromRead: false };
+    const { files, blobs } = await storeImages(picked);
+    const draft = { title: '', files, materials: [], readNote: '', fromRead: false };
+    await readPhotosInto(draft, blobs, (i, n) => setBusy(true, `Lecture de la photo ${i} sur ${n}…`));
+    ui.draftPattern = draft;
     go('#/patron/brouillon');
   } finally {
     setBusy(false);
@@ -99,11 +101,33 @@ actions['pattern.pickImage'] = async () => {
 
 async function storeImages(list) {
   const files = [];
+  const blobs = [];
   for (const f of list) {
     const blob = await shrinkImage(f, 2200, 0.85);
+    blobs.push(blob);
     files.push({ id: await store.putBlob(blob, f.name), name: f.name, type: 'image' });
   }
-  return files;
+  return { files, blobs };
+}
+
+/** Lit le matériel sur des photos (OCR sur l'appareil) et remplit le patron. Ne lève jamais d'erreur. */
+async function readPhotosInto(cur, blobs, onProgress) {
+  try {
+    const text = await ocrImages(blobs, { onProgress });
+    const parsed = parsePattern(text);
+    if (parsed.materials.length) {
+      cur.materials = parsed.materials.map(withId);
+      cur.variants = parsed.variants || [];
+      cur.variantIdx = 0;
+      cur.fromRead = true;
+      cur.readNote = '';
+    } else {
+      cur.readNote = 'Aucun matériel reconnu sur les photos : ajoute les lignes à la main.';
+    }
+  } catch (e) {
+    cur.readNote = 'Lecture des photos impossible : saisis le matériel à la main.';
+  }
+  return cur;
 }
 
 actions['pattern.manual'] = () => {
@@ -139,7 +163,7 @@ export function renderPatternEditor(id) {
       ${filesSection(files, isDraft ? 'brouillon' : p.id)}
       <div class="field"><label for="p-link">Lien du patron (facultatif)</label><input id="p-link" name="link" type="url" value="${esc(p.link || '')}" placeholder="https://"></div>
       ${p.readNote ? `<div class="banner warn" style="margin-bottom:12px">${icons.alert}<span>${esc(p.readNote)}</span></div>` : ''}
-      ${p.fromRead ? `<div class="banner warn" style="margin-bottom:12px">${icons.alert}<span>À vérifier<span class="sub">L’appli a lu ces lignes dans le PDF : corrige ce qui est faux.</span></span></div>` : ''}
+      ${p.fromRead ? `<div class="banner warn" style="margin-bottom:12px">${icons.alert}<span>À vérifier<span class="sub">L’appli a lu ces lignes dans le patron : vérifie surtout les chiffres.</span></span></div>` : ''}
       ${variantChips(p)}
       <div class="section" style="margin-top:6px"><h2>Matériel${yarnRows.length ? `<small>${covered} fil${covered > 1 ? 's' : ''} sur ${yarnRows.length} couvert${covered > 1 ? 's' : ''} par ton stock</small>` : ''}</h2>
         <div class="stack" id="mat-list">${mats.map((m, i) => materialRow(m, i, d)).join('') || '<p class="hint">Aucune ligne pour l’instant. Ajoute les fils, le crochet et les accessoires.</p>'}</div>
@@ -217,7 +241,8 @@ function filesSection(files, id) {
     <div class="stack">${rows || '<p class="hint">Ajoute le PDF du patron et des photos (pages, schémas, résultat) pour tout garder ici et le suivre pendant que tu crochètes.</p>'}</div>
     <div class="row" style="margin:10px 0 16px"><button type="button" class="btn small" data-act="pattern.addPdf">+ PDF</button>
       <button type="button" class="btn small" data-act="pattern.addPhotos">+ Photos</button>
-      ${files.length ? `<button type="button" class="btn small primary" data-act="pattern.read" data-id="${esc(id)}">Lire les instructions</button>` : ''}</div></div>`;
+      ${files.length ? `<button type="button" class="btn small primary" data-act="pattern.read" data-id="${esc(id)}">Lire les instructions</button>` : ''}</div>
+    ${files.some((f) => f.type === 'image') ? '<button type="button" class="linkbtn" style="margin:-6px 0 14px" data-act="pattern.ocr">Lire le matériel sur les photos</button>' : ''}</div>`;
 }
 
 function variantChips(p) {
@@ -383,10 +408,51 @@ actions['pattern.addPdf'] = async () => {
 actions['pattern.addPhotos'] = async () => {
   const picked = await pickFiles({ accept: 'image/*' });
   if (!picked.length) return;
-  toast('Enregistrement des photos…');
-  await changeFiles(async (cur) => {
-    cur.files.push(...(await storeImages(picked)));
-    return cur;
+  const stop = toastHold('Enregistrement des photos…');
+  try {
+    await changeFiles(async (cur) => {
+      const { files, blobs } = await storeImages(picked);
+      cur.files.push(...files);
+      // Patron sans matériel : on lit les photos pour pré-remplir
+      if (!(cur.materials || []).length) {
+        await readPhotosInto(cur, blobs, (i, n) => toastHold(`Lecture de la photo ${i} sur ${n}…`));
+      }
+      return cur;
+    });
+  } finally {
+    stop();
+  }
+};
+
+/** Relit le matériel sur les photos déjà ajoutées. */
+actions['pattern.ocr'] = () => {
+  const run = async () => {
+    const stop = toastHold('Lecture des photos…');
+    try {
+      await changeFiles(async (cur) => {
+        const blobs = [];
+        for (const f of cur.files.filter((x) => x.type === 'image')) {
+          const rec = await store.loadBlob(f.id);
+          if (rec) blobs.push(rec.blob);
+        }
+        if (!blobs.length) {
+          toast('Photos indisponibles sur cet appareil');
+          return null;
+        }
+        return readPhotosInto(cur, blobs, (i, n) => toastHold(`Lecture de la photo ${i} sur ${n}…`));
+      });
+    } finally {
+      stop();
+    }
+  };
+  const form = document.getElementById('pattern-form');
+  const hasRows = form && form.querySelector('[data-row]');
+  if (!hasRows) return run();
+  confirmSheet({
+    title: 'Relire le matériel sur les photos ?',
+    text: 'Le matériel actuel sera remplacé par ce que l’appli lit sur les photos.',
+    confirmLabel: 'Relire',
+    onConfirm: run,
   });
 };
 

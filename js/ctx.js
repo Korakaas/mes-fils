@@ -153,6 +153,16 @@ export function toast(msg, ms = 2600) {
   }, ms);
 }
 
+/** Message qui reste affiché pendant un travail long ; renvoie la fonction qui le retire. */
+export function toastHold(msg) {
+  toast(msg, 10 * 60 * 1000);
+  return () => {
+    clearTimeout(toastTimer);
+    ui.toast = '';
+    paintOverlay();
+  };
+}
+
 export function openSheet(sheet) {
   ui.sheet = sheet;
   paintOverlay();

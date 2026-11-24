@@ -93,3 +93,46 @@ export async function renderPdf(blob, container, { onProgress } = {}) {
   }
   return doc.numPages;
 }
+
+
+let tesseractPromise = null;
+
+function loadTesseract() {
+  if (!tesseractPromise) {
+    tesseractPromise = new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = new URL('../vendor/tesseract/tesseract.min.js', import.meta.url).href;
+      el.onload = () => resolve(window.Tesseract);
+      el.onerror = () => {
+        tesseractPromise = null;
+        reject(new Error('ocr-load'));
+      };
+      document.head.appendChild(el);
+    });
+  }
+  return tesseractPromise;
+}
+
+/** Lit le texte de photos (français + anglais), sur l'appareil, sans réseau. Renvoie le texte de toutes les photos. */
+export async function ocrImages(blobs, { onProgress } = {}) {
+  const T = await loadTesseract();
+  const base = new URL('../vendor/tesseract/', import.meta.url).href;
+  const worker = await T.createWorker(['fra', 'eng'], 1, {
+    workerPath: base + 'worker.min.js',
+    corePath: base + 'core',
+    langPath: base + 'lang',
+    gzip: true,
+    workerBlobURL: false,
+  });
+  try {
+    const out = [];
+    for (let i = 0; i < blobs.length; i++) {
+      if (onProgress) onProgress(i + 1, blobs.length);
+      const { data } = await worker.recognize(blobs[i]);
+      out.push(data.text || '');
+    }
+    return out.join('\n');
+  } finally {
+    await worker.terminate();
+  }
+}

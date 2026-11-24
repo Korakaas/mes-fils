@@ -8,7 +8,7 @@ retrouver la même chose sur l'ordinateur.
 ## Ce que fait l'appli
 
 - **Stock** : fils avec couleur, matière, épaisseur, pelotes, poids, métrage, boîte, photo. Filtres, tri, recherche, pesée du reste.
-- **Patrons** : import d'un PDF (lecture automatique des matériaux : fils, crochets, accessoires), d'une photo ou saisie rapide. Le PDF d'origine est conservé (50 Mo max) et se lit dans l'appli.
+- **Patrons** : import d'un PDF ou de photos (lecture automatique du matériel : fils, crochets, accessoires, tailles du patron), ou saisie rapide. Un patron garde plusieurs fichiers (PDF et photos, 50 Mo max par PDF) qui se lisent dans l'appli, écran allumé, y compris depuis le projet.
 - **Projets** : un projet = un patron + des fils choisis. L'appli calcule le besoin avec marge (10 %, réglable), propose les fils en stock suffisants ou à combiner, réserve les fils, et indique « Assez / Il manque / À choisir ».
 - **En pause** : un interrupteur par projet décide si les fils restent réservés.
 - **Fin de projet** : tu pèses ce qui reste ; un reste de moins de 20 g sort du stock (seuil réglable). Coût du projet calculé avec le prix des fils.
@@ -54,7 +54,7 @@ en cas de modification des deux côtés, la plus récente gagne.
 - Le plan gratuit de Supabase **met en pause un projet inactif** (environ une semaine sans activité) : il se réveille depuis le tableau de bord Supabase. Les données locales restent intactes.
 - Les fichiers (photos, PDF) sont dans un bucket public mais sous des adresses aléatoires impossibles à deviner ; le code secret n'apparaît jamais dans l'adresse.
 - La **sauvegarde JSON ne contient pas les photos ni les PDF** (seulement les données). Ils sont conservés par la synchro.
-- La lecture automatique ne marche que sur les **PDF contenant du texte**. Pour un PDF scanné ou une photo, l'appli ouvre la saisie rapide des matériaux.
+- La lecture des **PDF** ne marche que sur ceux qui contiennent du texte. Les **photos** sont lues par une reconnaissance de texte intégrée (français et anglais, sur l'appareil, sans réseau, environ 12 Mo de fichiers) : elle est fiable sur des captures d'écran ou des pages nettes, moins sur des photos penchées ou manuscrites. Vérifie toujours les chiffres avant d'enregistrer.
 - Ressaisie à la main depuis Notion (pas d'import prévu).
 
 ## Mettre à jour l'appli
