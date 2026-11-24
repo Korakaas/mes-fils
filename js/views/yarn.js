@@ -1,3 +1,4 @@
+import { colorDots, toggleFamily, applyShade, openShadeSheet } from '../colors.js';
 import * as store from '../store.js';
 import * as L from '../logic.js';
 import { shrinkImage } from '../media.js';
@@ -24,7 +25,7 @@ export function renderYarn(id) {
   const row = (k, v) => (v ? `<div class="kv"><span>${k}</span><span>${v}</span></div>` : '');
   return `
     ${topbar(yarnTitle(y), { backHref: '#/' })}
-    <div class="photo-hero" ${photoAttrs(y.photoId, y.colorKey)}>
+    <div class="photo-hero" ${photoAttrs(y.photoId, y.colorKey, y.colorHex)}>
       <div class="over"><button type="button" class="btn small" data-act="yarn.photo" data-id="${esc(y.id)}">${icons.camera}${y.photoId ? 'Changer la photo' : 'Ajouter une photo'}</button></div>
     </div>
     <div class="chips wrap" style="margin-bottom:12px">${tags}${y.inStock === false ? '<span class="pill bad">Épuisé</span>' : `<span class="pill ${level.key}">${level.label}</span>`}</div>
@@ -139,9 +140,7 @@ export function renderYarnForm(id) {
     `<div class="chips wrap" role="group" aria-label="${name}">${values
       .map((v) => `<button type="button" class="chip" aria-pressed="${current === v}" data-act="yarnform.chip" data-field="${name}" data-value="${esc(v)}">${esc(v)}</button>`)
       .join('')}</div>`;
-  const colors = `<div class="colors" role="group" aria-label="Couleur">${L.COLORS.map(
-    (c) => `<button type="button" class="dot" aria-label="${esc(c.label)}" aria-pressed="${y.colorKey === c.key}" data-act="yarnform.color" data-value="${c.key}" style="${c.hex.startsWith('linear') ? `background:${c.hex}` : `background-color:${c.hex}`}"></button>`,
-  ).join('')}</div>`;
+  const colors = colorDots({ act: 'yarnform.color', shadeAct: 'yarnform.shade', key: y.colorKey, hex: y.colorHex });
   const boxOptions = ['<option value="">Pas de boîte</option>', ...d.boxes.map((b) => `<option value="${esc(b.id)}" ${y.boxId === b.id ? 'selected' : ''}>${esc(b.name)}</option>`)].join('');
   return `
     ${topbar(editing ? 'Modifier le fil' : 'Ajouter un fil', { backHref: editing ? `#/fil/${id}` : '#/' })}
@@ -149,6 +148,7 @@ export function renderYarnForm(id) {
       <input type="hidden" name="weightCategory" value="${esc(y.weightCategory || '')}">
       <input type="hidden" name="material" value="${esc(y.material || '')}">
       <input type="hidden" name="colorKey" value="${esc(y.colorKey || '')}">
+      <input type="hidden" name="colorHex" value="${esc(y.colorHex || '')}">
       <div class="row" style="align-items:flex-end;margin-bottom:14px">
         <div style="flex:none;width:96px">
           <button type="button" class="btn block" id="yarn-photo-btn" data-act="yarnform.photo" style="height:96px;border-radius:20px;flex-direction:column;gap:2px;padding:0;background-size:cover;background-position:center" ${y.photoId ? `data-photo="${esc(y.photoId)}"` : ''}>${icons.camera}<span style="font-size:12px">Photo</span></button>
@@ -202,12 +202,10 @@ actions['yarnform.chip'] = (el) => {
   }
 };
 
-actions['yarnform.color'] = (el) => {
+actions['yarnform.color'] = (el) => toggleFamily(document.getElementById('yarn-form'), el);
+actions['yarnform.shade'] = () => {
   const form = document.getElementById('yarn-form');
-  const already = el.getAttribute('aria-pressed') === 'true';
-  el.parentElement.querySelectorAll('.dot').forEach((c) => c.setAttribute('aria-pressed', 'false'));
-  form.elements.colorKey.value = already ? '' : el.dataset.value;
-  if (!already) el.setAttribute('aria-pressed', 'true');
+  openShadeSheet(form.elements.colorHex.value, (hex) => applyShade(form, hex));
 };
 
 actions['yarnform.photo'] = async () => {
@@ -260,6 +258,7 @@ submits['yarn.save'] = async (form) => {
     weightCategory: v.weightCategory || '',
     material: v.material || '',
     colorKey: v.colorKey || '',
+    colorHex: /^#[0-9a-f]{6}$/i.test(v.colorHex || '') ? v.colorHex : '',
     colorName: (v.colorName || '').trim(),
     brand: (v.brand || '').trim(),
     skeins: toNum(v.skeins) ?? 1,

@@ -79,14 +79,12 @@ export async function renderPdf(blob, container, { onProgress, perPage = false, 
     const page = await doc.getPage(i);
     const base = page.getViewport({ scale: 1 });
     const scale = width / base.width;
-    const vp = page.getViewport({ scale: scale * dpr });
+    // en livret, on dessine plus fin (x1,5) pour que le zoom reste net
+    const vp = page.getViewport({ scale: scale * dpr * (perPage ? 1.5 : 1) });
     const canvas = document.createElement('canvas');
     canvas.width = Math.floor(vp.width);
     canvas.height = Math.floor(vp.height);
-    if (perPage) {
-      canvas.style.width = '100%';
-      canvas.style.height = 'auto';
-    } else {
+    if (!perPage) {
       canvas.style.width = width + 'px';
       canvas.style.height = Math.floor(vp.height / dpr) + 'px';
     }

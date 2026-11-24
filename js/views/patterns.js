@@ -1,3 +1,4 @@
+import { colorDots, toggleFamily, applyShade, openShadeSheet } from '../colors.js';
 import * as store from '../store.js';
 import * as L from '../logic.js';
 import { parsePattern, applyVariant } from '../patternParse.js';
@@ -273,10 +274,8 @@ function materialRow(m, i, d) {
     return `<div class="card mat" data-row="${i}">${base}${head}
       ${field('Description', 'label', m.label, { ph: 'ex. Coton worsted, ou marque du fil' })}
       ${field('Coloris', 'colorName', m.colorName, { ph: 'ex. 001 blanc' })}
-      <input type="hidden" name="colorKey" value="${esc(m.colorKey || '')}">
-      <div class="colors" role="group" aria-label="Famille de couleur">${L.COLORS.map(
-        (c) => `<button type="button" class="dot" aria-label="${esc(c.label)}" aria-pressed="${m.colorKey === c.key}" data-act="pattern.color" data-value="${c.key}" style="${c.hex.startsWith('linear') ? `background:${c.hex}` : `background-color:${c.hex}`}"></button>`,
-      ).join('')}</div>
+      <input type="hidden" name="colorKey" value="${esc(m.colorKey || '')}"><input type="hidden" name="colorHex" value="${esc(m.colorHex || '')}">
+      ${colorDots({ act: 'pattern.color', shadeAct: 'pattern.shade', key: m.colorKey, hex: m.colorHex })}
       <div class="field" style="margin:0"><label>Épaisseur<select name="weightCategory" data-input="pattern.row" style="margin-top:4px">${wOpts}</select></label></div>
       <div class="row">${field('Poids total (g)', 'grams', m.grams, { type: 'num' })}${field('Mètres total', 'meters', m.meters, { type: 'num' })}</div>
       <div class="row">${field('Pelotes', 'skeins', m.skeins, { type: 'num' })}${field('g / pelote', 'skeinGrams', m.skeinGrams, { type: 'num' })}${field('m / pelote', 'skeinMeters', m.skeinMeters, { type: 'num' })}</div>
@@ -297,6 +296,7 @@ function collectRows(form) {
       m.weightCategory = get('weightCategory');
       m.colorName = get('colorName').trim();
       m.colorKey = get('colorKey');
+      m.colorHex = get('colorHex');
       for (const k of ['grams', 'meters', 'skeins', 'skeinGrams', 'skeinMeters']) m[k] = toNum(get(k));
     }
     if (kind === 'hook') m.size = toNum(get('size'));
@@ -345,13 +345,10 @@ actions['pattern.addRow'] = (el) => {
   }
 };
 
-actions['pattern.color'] = (el) => {
+actions['pattern.color'] = (el) => toggleFamily(el.closest('[data-row]'), el);
+actions['pattern.shade'] = (el) => {
   const row = el.closest('[data-row]');
-  const hidden = row.querySelector('[name="colorKey"]');
-  const already = el.getAttribute('aria-pressed') === 'true';
-  el.parentElement.querySelectorAll('.dot').forEach((c) => c.setAttribute('aria-pressed', 'false'));
-  hidden.value = already ? '' : el.dataset.value;
-  if (!already) el.setAttribute('aria-pressed', 'true');
+  openShadeSheet(row.querySelector('[name="colorHex"]').value, (hex) => applyShade(row, hex));
 };
 
 actions['pattern.delRow'] = (el) => {
@@ -606,6 +603,7 @@ export function slotsFromPattern(p) {
       label: m.label || 'Fil',
       colorName: m.colorName || '',
       colorKey: m.colorKey || '',
+      colorHex: m.colorHex || '',
       weightCategory: m.weightCategory || '',
       grams: m.grams ?? null,
       meters: m.meters ?? null,
@@ -676,6 +674,21 @@ const readerPref = {
       /* préférence facultative */
     }
   },
+  getZoom() {
+    try {
+      const z = Number(localStorage.getItem('mesfils.zoom'));
+      return [1, 1.5, 2].includes(z) ? z : 1;
+    } catch (e) {
+      return 1;
+    }
+  },
+  setZoom(z) {
+    try {
+      localStorage.setItem('mesfils.zoom', String(z));
+    } catch (e) {
+      /* facultatif */
+    }
+  },
   getPos(id) {
     try {
       return Number(localStorage.getItem('mesfils.pos.' + id)) || 0;
@@ -710,15 +723,18 @@ export function renderReader(id, projectId) {
         )
         .join('')
     : `<p class="hint">Ce patron n’a pas de fichier. Ajoute un PDF ou des photos depuis la fiche du patron.</p>${open}`;
-  const seg = (m, label) => `<button type="button" aria-pressed="${mode === m}" data-act="reader.mode" data-mode="${m}">${label}</button>`;
-  const bar = files.length
-    ? `<div class="rbar"><div class="seg" role="group" aria-label="Affichage">${seg('book', 'Livret')}${seg('scroll', 'Défilement')}</div></div>`
+  const zoom = readerPref.getZoom();
+  const modeBtn = files.length
+    ? `<button type="button" class="linkbtn" id="rmode" data-act="reader.mode" data-mode="${mode === 'book' ? 'scroll' : 'book'}">${mode === 'book' ? 'Défilement' : 'Livret'}</button>`
     : '';
   const nav = files.length
-    ? `<div class="rnav" id="rnav"><button type="button" class="iconbtn" data-act="reader.prev" aria-label="Page précédente">‹</button><span id="rcount" aria-live="polite">Page 1</span><button type="button" class="iconbtn" data-act="reader.next" aria-label="Page suivante">›</button></div>`
+    ? `<div class="rnav" id="rnav"><button type="button" class="iconbtn" data-act="reader.prev" aria-label="Page précédente">‹</button>
+        <span id="rcount" aria-live="polite">Page 1</span>
+        <button type="button" class="btn small" id="rzoom" data-act="reader.zoom" aria-label="Changer la taille d’affichage">${Math.round(zoom * 100)} %</button>
+        <button type="button" class="iconbtn" data-act="reader.next" aria-label="Page suivante">›</button></div>`
     : '';
-  return `${topbar(p.title || 'Patron', { backHref: back })}
-    <div class="reader ${mode}" id="reader" data-pid="${esc(id)}">${bar}<div class="pages" id="pages">${body}</div>${nav}${files.length ? `<p class="hint rhint" style="margin:6px 0 0">L’écran reste allumé pendant la lecture. Pince l’écran pour zoomer.</p>` : ''}${files.length ? open : ''}</div>`;
+  return `${topbar(p.title || 'Patron', { backHref: back, right: modeBtn })}
+    <div class="reader ${mode} z${String(zoom).replace('.', '')}" id="reader" data-pid="${esc(id)}"><div class="pages" id="pages">${body}</div>${nav}${files.length ? `<p class="hint rhint" style="margin:6px 0 0">L’écran reste allumé pendant la lecture. Touche deux fois une page pour l’agrandir.</p>` : ''}${files.length ? open : ''}</div>`;
 }
 
 function rpages() {
@@ -778,10 +794,49 @@ actions['reader.mode'] = (el) => {
   const box = document.getElementById('reader');
   box.classList.toggle('book', mode === 'book');
   box.classList.toggle('scroll', mode === 'scroll');
-  box.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+  el.dataset.mode = mode === 'book' ? 'scroll' : 'book';
+  el.textContent = mode === 'book' ? 'Défilement' : 'Livret';
   const keep = rd.cur;
   requestAnimationFrame(() => showPage(keep, false));
 };
+
+function setZoom(z) {
+  const box = document.getElementById('reader');
+  if (!box) return;
+  readerPref.setZoom(z);
+  box.classList.remove('z1', 'z15', 'z2');
+  box.classList.add('z' + String(z).replace('.', ''));
+  const b = document.getElementById('rzoom');
+  if (b) b.textContent = `${Math.round(z * 100)} %`;
+  const keep = rd.cur;
+  requestAnimationFrame(() => {
+    showPage(keep, false);
+    const pg = rpages()[keep];
+    if (pg) pg.scrollLeft = Math.max(0, (pg.scrollWidth - pg.clientWidth) / 2);
+  });
+}
+const nextZoom = (z) => (z === 1 ? 1.5 : z === 1.5 ? 2 : 1);
+actions['reader.zoom'] = () => setZoom(nextZoom(readerPref.getZoom()));
+
+/** Double touche : zoom x2 / retour à 100 %. */
+function bindDoubleTap() {
+  const box = document.getElementById('pages');
+  let last = 0;
+  box.addEventListener(
+    'touchend',
+    (e) => {
+      if (e.changedTouches.length !== 1 || e.touches.length) return;
+      const t = Date.now();
+      if (t - last < 300) {
+        e.preventDefault();
+        setZoom(readerPref.getZoom() === 1 ? 2 : 1);
+        last = 0;
+      } else last = t;
+    },
+    { passive: false },
+  );
+  box.addEventListener('dblclick', () => setZoom(readerPref.getZoom() === 1 ? 2 : 1));
+}
 actions['reader.prev'] = () => showPage(rd.cur - 1);
 actions['reader.next'] = () => showPage(rd.cur + 1);
 
@@ -839,6 +894,7 @@ export async function afterReader() {
   if (!rpages().length) return;
   const saved = readerPref.getPos(rd.id);
   bindReaderScroll();
+  bindDoubleTap();
   setCurrent(0);
   if (saved > 0 && saved < rpages().length) setTimeout(() => showPage(saved, false), 60);
   else if (rd.id) readerPref.setPos(rd.id, 0);

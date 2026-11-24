@@ -93,15 +93,16 @@ export function pill(kind, text) {
   return `<span class="pill ${kind}">${esc(text)}</span>`;
 }
 
-export function colorStyle(colorKey) {
+export function colorStyle(colorKey, colorHex) {
+  if (/^#[0-9a-f]{6}$/i.test(colorHex || '')) return `background-color:${colorHex}`;
   const c = L.colorOf(colorKey);
   if (!c) return 'background-color:#f1e8de';
   return c.hex.startsWith('linear') ? `background:${c.hex}` : `background-color:${c.hex}`;
 }
 
 /** Cadre photo : la photo (fichier local) est posée après coup par hydratePhotos. */
-export function photoAttrs(photoId, colorKey) {
-  return `style="${colorStyle(colorKey)}" ${photoId ? `data-photo="${esc(photoId)}"` : ''}`;
+export function photoAttrs(photoId, colorKey, colorHex) {
+  return `style="${colorStyle(colorKey, colorHex)}" ${photoId ? `data-photo="${esc(photoId)}"` : ''}`;
 }
 
 export async function hydratePhotos(root = document) {

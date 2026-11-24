@@ -136,7 +136,7 @@ function allocRow(slotId, a, d, projectId) {
   if (!y) return `<div class="alloc"><span class="grow" style="color:var(--bad)">Fil supprimé</span><button type="button" class="linkbtn" data-act="project.unalloc" data-slot="${esc(slotId)}" data-yarn="${esc(a.yarnId)}">Retirer</button></div>`;
   const avail = L.availableGrams(y, d.projects, projectId);
   const over = Number(a.grams) > avail + 0.0001;
-  return `<div class="alloc"><span class="sw" ${photoAttrs(y.photoId, y.colorKey)}></span>
+  return `<div class="alloc"><span class="sw" ${photoAttrs(y.photoId, y.colorKey, y.colorHex)}></span>
     <span class="grow">${esc(yarnTitle(y))}${over ? `<br><span style="color:var(--bad);font-weight:600;font-size:12px">Seulement ${esc(L.fmtGrams(avail))} disponibles</span>` : ''}</span>
     <input type="text" inputmode="decimal" value="${esc(numStr(a.grams))}" aria-label="Grammes pris dans ${esc(yarnTitle(y))}" data-change="project.alloc" data-slot="${esc(slotId)}" data-yarn="${esc(a.yarnId)}"><span aria-hidden="true">g</span>
     <button type="button" class="iconbtn ghost" style="width:36px;height:36px" aria-label="Retirer ce fil" data-act="project.unalloc" data-slot="${esc(slotId)}" data-yarn="${esc(a.yarnId)}">${icons.close}</button></div>`;

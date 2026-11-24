@@ -309,27 +309,27 @@ details.more > .inner { padding-bottom: 4px; }
 .rfile { margin-bottom: 14px; }
 .reader img { margin-bottom: 8px; display: block; }
 
-/* Lecteur : livret (une page à la fois, on glisse de droite à gauche) ou défilement vertical */
-.rbar { display: flex; justify-content: center; }
-.seg { display: inline-flex; background: #f1e8de; border-radius: 999px; padding: 3px; gap: 2px; }
-.seg button { border: 0; background: transparent; min-height: 40px; padding: 0 18px; border-radius: 999px; font: inherit; font-weight: 700; color: var(--muted); cursor: pointer; }
-.seg button[aria-pressed='true'] { background: var(--card); color: var(--accent); box-shadow: 0 1px 4px rgba(80, 50, 40, 0.15); }
+/* Lecteur : livret (une page à la fois, on glisse de droite à gauche) ou défilement vertical, pages bord à bord, zoom 100 / 150 / 200 % */
 .rpage { margin: 0; }
-.rpage canvas, .rpage img { margin-bottom: 0; }
-.reader.scroll .rpage { margin-bottom: 10px; }
-.reader.scroll .rnav { display: none; }
+.rpage canvas, .rpage img { margin-bottom: 0; border-radius: 0; box-shadow: none; display: block; width: 100%; max-width: none; }
+.reader.z15 .rpage canvas, .reader.z15 .rpage img { width: 150%; }
+.reader.z2 .rpage canvas, .reader.z2 .rpage img { width: 200%; }
 .reader.book .rtitle { display: none; }
 .reader.book .rfile, .reader.book .rbody { display: contents; }
 .reader.book .pages {
   display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
-  height: calc(100dvh - 190px); min-height: 320px; margin: 0 -16px; gap: 0; -webkit-overflow-scrolling: touch;
+  height: calc(100dvh - 150px); min-height: 320px; margin: 0 -16px; gap: 0; -webkit-overflow-scrolling: touch;
 }
-.reader.book .rpage { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; scroll-snap-stop: always; overflow-y: auto; padding: 0 16px; box-sizing: border-box; }
+.reader.book.z15 .pages, .reader.book.z2 .pages { overflow-x: hidden; scroll-snap-type: none; }
+.reader.book .rpage { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; scroll-snap-stop: always; overflow: auto; box-sizing: border-box; }
 .reader.book .spinner { flex: 0 0 100%; }
 .reader.book .rhint { display: none; }
-.rnav { position: sticky; bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 6px 8px; box-shadow: 0 4px 14px rgba(80, 50, 40, 0.14); }
+.reader.scroll .pages { margin: 0 -16px; }
+.reader.scroll .rpage { margin-bottom: 6px; overflow-x: auto; }
+.rnav { position: sticky; bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 6px 8px; box-shadow: 0 4px 14px rgba(80, 50, 40, 0.14); }
 .rnav .iconbtn { font-size: 26px; line-height: 1; }
-.rnav span { font-weight: 800; }
+.rnav span { font-weight: 800; flex: 1; text-align: center; }
+.rnav .btn.small { min-width: 64px; }
 
 /* Liste des fichiers d'un patron : miniatures plus grandes, ordre modifiable */
 .frow { display: flex; align-items: center; gap: 8px; padding: 8px 10px; position: relative; touch-action: pan-y; background: var(--card); }
@@ -341,3 +341,13 @@ details.more > .inner { padding-bottom: 4px; }
 .frow .fbtns { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
 .frow .fbtns .iconbtn { width: 36px; height: 30px; font-size: 18px; }
 .frow .fbtns .iconbtn:disabled { opacity: 0.3; }
+
+/* Nuancier */
+.colors .dot.custom { background: conic-gradient(#e98a7a, #f1ce6b, #a9cda5, #9dbfe0, #b9a5d6, #f0b7c4, #e98a7a); display: flex; align-items: center; justify-content: center; }
+.colors .dot.custom .plus { font-weight: 800; font-size: 20px; color: var(--ink); text-shadow: 0 0 4px #fff; line-height: 1; }
+.colors .dot.custom[aria-pressed='true'] .plus { display: none; }
+.shades { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
+.shade { aspect-ratio: 1; border-radius: 50%; border: 2px solid var(--line-strong); padding: 0; min-height: 36px; position: relative; }
+.shade[aria-pressed='true'] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.reader { padding-bottom: 8px; }
