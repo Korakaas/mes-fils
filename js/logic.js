@@ -161,6 +161,11 @@ export function slotStatus(slot, yarnsById, projects, project, margin = DEFAULTS
     if (n(a.grams) > availableGrams(y, projects, project ? project.id : null) + 0.0001) conflict = true;
   }
   const known = needMargin !== null;
+  // Petite quantité (restes de pelotes) sans besoin chiffré : une ligne est « assez » dès qu'un fil est choisi.
+  const scraps = !!slot.scraps && !known;
+  if (scraps) {
+    return { need: null, needMargin: null, allocated, shortfall: 0, conflict, ok: allocations.length > 0 ? !conflict : null, unknown: false, scraps: true, hasYarn: allocations.length > 0 };
+  }
   const ok = known ? allocated >= needMargin && !conflict : null;
   return {
     need,
@@ -210,6 +215,22 @@ export function matchesFilters(y, f = {}) {
   if (f.materials && f.materials.length && !f.materials.includes(y.material)) return false;
   if (f.colors && f.colors.length && !f.colors.includes(y.colorKey)) return false;
   return true;
+}
+
+/** Fils à proposer pour une petite quantité : mêmes couleur et épaisseur d'abord, puis les plus petits restes. */
+export function scrapsCandidates(slot, yarns, projects, opts = {}) {
+  const filters = opts.filters || {};
+  const projectId = opts.projectId ?? null;
+  return yarns
+    .filter((y) => !y.deleted && y.inStock !== false && matchesFilters(y, filters))
+    .map((y) => ({
+      yarn: y,
+      available: availableGrams(y, projects, projectId),
+      sameWeight: !!slot.weightCategory && slot.weightCategory === y.weightCategory,
+      sameColor: !!slot.colorKey && slot.colorKey === y.colorKey,
+    }))
+    .filter((r) => r.available > 0)
+    .sort((a, b) => Number(b.sameColor) - Number(a.sameColor) || Number(b.sameWeight) - Number(a.sameWeight) || a.available - b.available);
 }
 
 /**

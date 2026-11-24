@@ -148,11 +148,11 @@ function slotCard(s, d, p) {
   const st = L.slotStatus(s, d.yarnsById, d.projects, p, d.settings.margin);
   let pillHtml;
   if (st.unknown) pillHtml = '<span class="pill info">Besoin à préciser</span>';
-  else if (st.ok) pillHtml = '<span class="pill good">Assez</span>';
+  else if (st.ok) pillHtml = `<span class="pill good">${st.scraps ? 'Restes' : 'Assez'}</span>`;
   else if (!st.hasYarn) pillHtml = '<span class="pill info">À choisir</span>';
   else if (st.conflict) pillHtml = '<span class="pill bad">Déjà réservé</span>';
   else pillHtml = `<span class="pill bad">Il manque ${esc(L.fmtGrams(st.shortfall))}</span>`;
-  const need = st.needMargin !== null ? `Besoin ${L.fmtGrams(st.need)}, soit ${L.fmtGrams(st.needMargin)} avec marge` : 'Ajoute un poids ou des mètres pour comparer';
+  const need = st.scraps ? 'Petite quantité : un reste de pelote suffit' : st.needMargin !== null ? `Besoin ${L.fmtGrams(st.need)}, soit ${L.fmtGrams(st.needMargin)} avec marge` : 'Ajoute un poids ou des mètres pour comparer';
   return `<div class="card slot"><div class="head"><div><div class="label">${esc(slotTitle(s))}</div><div class="need">${esc(need)}${s.weightCategory ? ` · ${esc(s.weightCategory)}` : ''}</div></div>${pillHtml}</div>
     ${(s.allocations || []).map((a) => allocRow(s.id, a, d, p.id)).join('')}
     <div class="row"><a class="btn small" href="#/projet/${esc(p.id)}/choisir/${esc(s.id)}">${(s.allocations || []).length ? 'Changer de fil' : 'Choisir un fil'}</a>
@@ -301,6 +301,7 @@ actions['project.slotMenu'] = (el) => {
         <div class="field"><label for="s-label">Description</label><input id="s-label" name="label" type="text" value="${esc(s.label || '')}"></div>
         <div class="field"><label for="s-colorname">Coloris</label><input id="s-colorname" name="colorName" type="text" value="${esc(s.colorName || '')}" placeholder="ex. 001 blanc"></div>
         <div class="field"><label for="s-weight">Épaisseur</label><select id="s-weight" name="weightCategory"><option value="">Peu importe</option>${L.WEIGHTS.map((w) => `<option ${s.weightCategory === w ? 'selected' : ''}>${w}</option>`).join('')}</select></div>
+        <label class="chk"><input type="checkbox" name="scraps" ${s.scraps ? 'checked' : ''}><span>Petite quantité : un reste de pelote suffit</span></label>
         <div class="row"><div class="field"><label for="s-grams">Besoin (g)</label><input id="s-grams" name="grams" type="text" inputmode="decimal" value="${esc(numStr(s.grams))}"></div>
         <div class="field"><label for="s-meters">Besoin (m)</label><input id="s-meters" name="meters" type="text" inputmode="decimal" value="${esc(numStr(s.meters))}"></div></div>
         <div class="actions"><button type="button" class="btn danger" data-act="project.removeSlot" data-slot="${esc(s.id)}">Retirer</button><button type="submit" class="btn primary">Enregistrer</button></div>
@@ -312,7 +313,7 @@ submits['project.saveSlot'] = async (form) => {
   const v = Object.fromEntries(new FormData(form));
   const p = currentProject();
   const slots = (p.slots || []).map((s) =>
-    s.id === form.dataset.slot ? { ...s, label: (v.label || '').trim() || 'Fil', colorName: (v.colorName || '').trim(), weightCategory: v.weightCategory || '', grams: toNum(v.grams), meters: toNum(v.meters), skeins: null } : s,
+    s.id === form.dataset.slot ? { ...s, label: (v.label || '').trim() || 'Fil', colorName: (v.colorName || '').trim(), scraps: v.scraps === 'on', weightCategory: v.weightCategory || '', grams: toNum(v.grams), meters: toNum(v.meters), skeins: null } : s,
   );
   closeSheet();
   await saveProject({ slots });
@@ -465,6 +466,7 @@ export function renderChoose(projectId, slotId) {
   const slot = p && (p.slots || []).find((s) => s.id === slotId);
   if (!p || !slot) return `${topbar('Introuvable', { backHref: '#/projets' })}`;
   const f = ui.chooseFilters;
+  if (slot.scraps && L.needGrams(slot, null) === null) return renderChooseScraps(d, p, slot);
   const res = L.candidatesForSlot(slot, d.yarns, d.projects, { margin: d.settings.margin, projectId: p.id, filters: f });
   const refNeed = L.needGrams(slot, null);
   const needM = L.withMargin(refNeed, d.settings.margin);
@@ -508,6 +510,30 @@ export function renderChoose(projectId, slotId) {
       ${chosen.length ? `<p class="hint">${chosen.length} fil${chosen.length > 1 ? 's' : ''} choisi${chosen.length > 1 ? 's' : ''} · ${esc(L.fmtGrams(total))} disponibles${needM !== null ? ` pour ${esc(L.fmtGrams(needM))} demandés` : ''}</p>` : ''}
       <button type="button" class="btn primary block" data-act="choose.validate" ${chosen.length ? '' : 'disabled'}>Valider</button>
     </div>`;
+}
+
+/** Choix d'un fil pour une petite quantité : on propose d'abord les restes qui ressemblent à ce qu'il faut. */
+function renderChooseScraps(d, p, slot) {
+  const f = ui.chooseFilters;
+  const sel = ui.chooseSel;
+  const rows = L.scrapsCandidates(slot, d.yarns, d.projects, { projectId: p.id, filters: f });
+  const nFilter = f.weights.length + f.materials.length + f.colors.length;
+  const chip = (key, text, n) => `<button type="button" class="chip" aria-pressed="${n > 0}" data-act="choose.filter" data-key="${key}">${text}${n ? ` · ${n}` : ''}</button>`;
+  const list = rows
+    .map((r) => {
+      const tags = [r.sameColor ? 'Même couleur' : '', r.sameWeight ? 'Même épaisseur' : ''].filter(Boolean).join(' · ');
+      return `<button type="button" class="pick" aria-pressed="${sel.has(r.yarn.id)}" data-act="choose.toggle" data-ids="${esc(r.yarn.id)}"><span class="box"></span><span class="grow"><span class="t">${esc(yarnTitle(r.yarn))}</span><span class="s">${esc(L.fmtGrams(r.available))} disponibles${tags ? ` · ${esc(tags)}` : ''}</span></span></button>`;
+    })
+    .join('');
+  const n = [...sel].filter((id) => d.yarnsById[id]).length;
+  return `
+    ${topbar('Choisir un reste', { backHref: `#/projet/${p.id}` })}
+    <div class="card"><div style="font-weight:800">${esc(slotTitle(slot))}${slot.weightCategory ? ` · ${esc(slot.weightCategory)}` : ''}</div>
+      <div class="hint">Petite quantité : un reste de pelote suffit. Les plus petits restes sont en premier. Tu pourras corriger les grammes dans le projet, et peser ce qui reste à la fin.</div></div>
+    <div class="chips" style="margin-top:10px" role="group" aria-label="Filtres">${chip('weights', 'Épaisseur', f.weights.length)}${chip('materials', 'Matière', f.materials.length)}${chip('colors', 'Couleur', f.colors.length)}
+      ${nFilter ? '<button type="button" class="chip" data-act="choose.clear">Effacer</button>' : ''}</div>
+    <div class="section"><h2>Restes de ton stock (${rows.length})</h2><div class="stack">${list || emptyState(icons.ball, 'Aucun fil en stock ne correspond.')}</div></div>
+    <div class="footer-actions"><button type="button" class="btn primary block" data-act="choose.validate" ${n ? '' : 'disabled'}>Valider</button></div>`;
 }
 
 export function initChoose(projectId, slotId) {
@@ -566,7 +592,8 @@ actions['choose.validate'] = async () => {
   const rows = chosen.map((y) => ({ yarn: y, available: L.availableGrams(y, d.projects, p.id) }));
   const need = L.withMargin(L.needGrams(slot, chosen[0] || null), d.settings.margin);
   let allocations;
-  if (need === null) allocations = rows.slice(0, 1).map((r) => ({ yarnId: r.yarn.id, grams: 0 }));
+  if (need === null && slot.scraps) allocations = rows.map((r) => ({ yarnId: r.yarn.id, grams: Math.min(10, Math.floor(r.available)) }));
+  else if (need === null) allocations = rows.slice(0, 1).map((r) => ({ yarnId: r.yarn.id, grams: 0 }));
   else {
     // Les fils les plus fournis d'abord, pour limiter le nombre de pelotes entamées.
     rows.sort((a, b) => b.available - a.available);

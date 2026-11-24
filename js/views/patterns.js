@@ -169,6 +169,7 @@ export function renderPatternEditor(id) {
       ${variantChips(p)}
       <div class="section" style="margin-top:6px"><h2>Matériel${yarnRows.length ? `<small>${covered} fil${covered > 1 ? 's' : ''} sur ${yarnRows.length} couvert${covered > 1 ? 's' : ''} par ton stock</small>` : ''}</h2>
         <div class="stack" id="mat-list">${mats.map((m, i) => materialRow(m, i, d)).join('') || '<p class="hint">Aucune ligne pour l’instant. Ajoute les fils, le crochet et les accessoires.</p>'}</div>
+        ${yarnRows.length > 1 ? '<button type="button" class="linkbtn" style="margin:8px 0 0" data-act="pattern.allScraps">Quantités non indiquées : tous les fils en petites quantités</button>' : ''}
         <div class="row" style="margin-top:10px"><button type="button" class="btn small" data-act="pattern.addRow" data-kind="yarn">+ Fil</button>
         <button type="button" class="btn small" data-act="pattern.addRow" data-kind="hook">+ Crochet</button>
         <button type="button" class="btn small" data-act="pattern.addRow" data-kind="accessory">+ Accessoire</button></div>
@@ -196,6 +197,9 @@ function slotFromRow(m) {
 
 export function bestSuggestion(m, d) {
   const slot = slotFromRow(m);
+  if (m.scraps && !slot.grams && !slot.meters && !(slot.skeins && slot.skeinGrams)) {
+    return { state: 'ok', html: 'Petite quantité : un reste de pelote suffit.', pill: ['soft', 'Restes'] };
+  }
   const hasInfo = slot.grams || slot.meters || (slot.skeins && slot.skeinGrams);
   if (!hasInfo) return { state: 'unknown', html: 'Ajoute un poids ou un métrage pour comparer à ton stock.' };
   const res = L.candidatesForSlot(slot, d.yarns, d.projects, { margin: d.settings.margin });
@@ -276,6 +280,7 @@ function materialRow(m, i, d) {
       ${field('Coloris', 'colorName', m.colorName, { ph: 'ex. 001 blanc' })}
       <input type="hidden" name="colorKey" value="${esc(m.colorKey || '')}"><input type="hidden" name="colorHex" value="${esc(m.colorHex || '')}">
       ${colorDots({ act: 'pattern.color', shadeAct: 'pattern.shade', key: m.colorKey, hex: m.colorHex })}
+      <label class="chk"><input type="checkbox" name="scraps" ${m.scraps ? 'checked' : ''} data-input="pattern.row"><span>Petite quantité : un reste de pelote suffit</span></label>
       <div class="field" style="margin:0"><label>Épaisseur<select name="weightCategory" data-input="pattern.row" style="margin-top:4px">${wOpts}</select></label></div>
       <div class="row">${field('Poids total (g)', 'grams', m.grams, { type: 'num' })}${field('Mètres total', 'meters', m.meters, { type: 'num' })}</div>
       <div class="row">${field('Pelotes', 'skeins', m.skeins, { type: 'num' })}${field('g / pelote', 'skeinGrams', m.skeinGrams, { type: 'num' })}${field('m / pelote', 'skeinMeters', m.skeinMeters, { type: 'num' })}</div>
@@ -297,6 +302,7 @@ function collectRows(form) {
       m.colorName = get('colorName').trim();
       m.colorKey = get('colorKey');
       m.colorHex = get('colorHex');
+      m.scraps = !!(row.querySelector('[name="scraps"]') || {}).checked;
       for (const k of ['grams', 'meters', 'skeins', 'skeinGrams', 'skeinMeters']) m[k] = toNum(get(k));
     }
     if (kind === 'hook') m.size = toNum(get('size'));
@@ -343,6 +349,15 @@ actions['pattern.addRow'] = (el) => {
     cur.materials.push(blank);
     rerender();
   }
+};
+
+actions['pattern.allScraps'] = () => {
+  const boxes = [...document.querySelectorAll('[data-row] [name="scraps"]')];
+  const turnOn = boxes.some((b) => !b.checked);
+  boxes.forEach((b) => {
+    b.checked = turnOn;
+    b.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 };
 
 actions['pattern.color'] = (el) => toggleFamily(el.closest('[data-row]'), el);
@@ -604,6 +619,7 @@ export function slotsFromPattern(p) {
       colorName: m.colorName || '',
       colorKey: m.colorKey || '',
       colorHex: m.colorHex || '',
+      scraps: !!m.scraps,
       weightCategory: m.weightCategory || '',
       grams: m.grams ?? null,
       meters: m.meters ?? null,

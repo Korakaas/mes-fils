@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   remainingGrams, metersFromGrams, stockLevel, reservedGrams, availableGrams, needGrams, withMargin,
-  slotStatus, projectStatus, candidatesForSlot, allocateAcross, finishConsumption, projectCost, reservesYarns,
+  slotStatus, projectStatus, candidatesForSlot, scrapsCandidates, allocateAcross, finishConsumption, projectCost, reservesYarns,
 } from '../js/logic.js';
 
 const phil = { id: 'phil', name: 'Phil Coton 4', skeins: 20, gramsPerSkein: 50, metersPerSkein: 85, usedGrams: 233, weightCategory: 'Worsted', material: 'Coton', inStock: true, price: 3.99 };
@@ -118,4 +118,23 @@ test('coût du projet', () => {
   assert.equal(c.complete, true);
   const c2 = projectCost({ slots: [{ allocations: [{ yarnId: 'rose', grams: 100 }] }] }, { rose });
   assert.equal(c2.complete, false);
+});
+
+test('petite quantité : assez dès qu’un fil est choisi, restes proposés par ordre', () => {
+  const slot = { id: 's', kind: 'yarn', scraps: true, weightCategory: 'Bulky', colorKey: 'rouge', allocations: [] };
+  const project = { id: 'p', status: 'en_cours', slots: [slot] };
+  const byId = { mout: moutarde, salt };
+  assert.equal(slotStatus(slot, byId, [project], project).ok, null);
+  assert.equal(projectStatus(project, byId, [project]).pending, 1);
+  const chosen = { ...slot, allocations: [{ yarnId: 'mout', grams: 10 }] };
+  const st = slotStatus(chosen, byId, [{ ...project, slots: [chosen] }], project);
+  assert.equal(st.ok, true);
+  assert.equal(st.unknown, false);
+  const red = { ...mohair, id: 'red', colorKey: 'rouge', weightCategory: 'Fingering', skeins: 1 };
+  const list = scrapsCandidates(slot, [salt, moutarde, red], [], {});
+  assert.equal(list[0].yarn.id, 'red'); // même couleur d'abord
+  assert.equal(list[1].yarn.id, 'mout'); // puis même épaisseur, plus petit reste en premier
+  // un besoin chiffré reste prioritaire sur le mode « restes »
+  const known = { ...slot, grams: 500 };
+  assert.equal(slotStatus(known, byId, [project], project).scraps, undefined);
 });
