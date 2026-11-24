@@ -163,7 +163,7 @@ export function renderPatternEditor(id) {
       <div class="field"><label for="p-title">${isDraft ? 'Nom du projet' : 'Titre du patron'}</label><input id="p-title" name="title" type="text" value="${esc(p.title || '')}" placeholder="ex. Mushroom Guy" autocomplete="off"></div>
       ${filesSection(files, isDraft ? 'brouillon' : p.id)}
       <div class="field"><label for="p-link">Lien du patron (facultatif)</label><input id="p-link" name="link" type="url" value="${esc(p.link || '')}" placeholder="https://"></div>
-      ${!isDraft && ui.patternBack ? `<div class="banner info" style="margin-bottom:12px">${icons.info}<span>Les fils déjà dans ton projet ne changent pas<span class="sub">Ici tu modifies le patron (pages, matériel). Pour un fil du projet, utilise « Modifier la ligne » dans le projet.</span></span></div>` : ''}
+      ${!isDraft && openProjectsOf(p.id).length ? `<div class="banner info" style="margin-bottom:12px">${icons.info}<span>Les projets ouverts de ce patron suivent<span class="sub">Descriptions, coloris, quantités et « petite quantité » sont reportés sur leurs lignes de fil. Les fils déjà choisis sont conservés.</span></span></div>` : ''}
       ${p.readNote ? `<div class="banner warn" style="margin-bottom:12px">${icons.alert}<span>${esc(p.readNote)}</span></div>` : ''}
       ${p.fromRead ? `<div class="banner warn" style="margin-bottom:12px">${icons.alert}<span>À vérifier<span class="sub">L’appli a lu ces lignes dans le patron : vérifie surtout les chiffres.</span></span></div>` : ''}
       ${variantChips(p)}
@@ -608,12 +608,64 @@ document.addEventListener(
   true,
 );
 
+const SYNC_FIELDS = ['label', 'colorName', 'colorKey', 'colorHex', 'scraps', 'weightCategory', 'grams', 'meters', 'skeins', 'skeinGrams', 'skeinMeters'];
+const LIVE_STATUSES = ['envie', 'en_cours', 'en_pause'];
+
+/** Projets encore ouverts qui utilisent ce patron. */
+function openProjectsOf(patternId) {
+  return data().projects.filter((p) => p.patternId === patternId && LIVE_STATUSES.includes(p.status));
+}
+
+/**
+ * Reporte les lignes de fil du patron sur ses projets ouverts : mêmes descriptions, coloris, quantités et « petite quantité ».
+ * Les fils déjà choisis dans le projet sont conservés ; une ligne ajoutée au patron est ajoutée au projet.
+ */
+async function syncProjectsFromPattern(pattern) {
+  const yarns = (pattern.materials || []).filter((m) => m.kind === 'yarn');
+  let n = 0;
+  for (const p of openProjectsOf(pattern.id)) {
+    const slots = (p.slots || []).map((s) => ({ ...s }));
+    const used = new Set();
+    const legacyIdx = slots.map((s, i) => (s.rowId ? -1 : i)).filter((i) => i >= 0);
+    const ordinal = legacyIdx.length === yarns.length;
+    let changed = false;
+    yarns.forEach((m, i) => {
+      let k = slots.findIndex((s, j) => s.rowId === m.id && !used.has(j));
+      if (k < 0) k = slots.findIndex((s, j) => !s.rowId && !used.has(j) && (s.label || '') === (m.label || '') && (s.colorName || '') === (m.colorName || ''));
+      if (k < 0 && ordinal && !used.has(legacyIdx[i])) k = legacyIdx[i];
+      if (k < 0) {
+        const fresh = slotsFromPattern({ materials: [m] })[0];
+        slots.push(fresh);
+        used.add(slots.length - 1);
+        changed = true;
+        return;
+      }
+      used.add(k);
+      const slot = slots[k];
+      slot.rowId = m.id;
+      for (const f of SYNC_FIELDS) {
+        const v = f === 'label' ? m.label || 'Fil' : f === 'scraps' ? !!m.scraps : m[f] ?? (['colorName', 'colorKey', 'colorHex', 'weightCategory'].includes(f) ? '' : null);
+        if (slot[f] !== v) {
+          slot[f] = v;
+          changed = true;
+        }
+      }
+    });
+    if (changed) {
+      await store.put('projects', { ...p, slots });
+      n++;
+    }
+  }
+  return n;
+}
+
 /** Crée les lignes de fils d'un projet à partir du matériel d'un patron. */
 export function slotsFromPattern(p) {
   return (p.materials || [])
     .filter((m) => m.kind === 'yarn')
     .map((m) => ({
       id: L.uid(),
+      rowId: m.id || '',
       kind: 'yarn',
       label: m.label || 'Fil',
       colorName: m.colorName || '',
@@ -653,6 +705,7 @@ submits['pattern.save'] = async (form) => {
   };
   const saved = await store.put('patterns', doc);
   ui.draftPattern = null;
+  const updated = id ? await syncProjectsFromPattern(saved) : 0;
   if (!id || lastSubmitter === 'project') {
     const project = await store.put('projects', {
       name: saved.title,
@@ -665,7 +718,7 @@ submits['pattern.save'] = async (form) => {
     toast('Projet créé');
     go(`#/projet/${project.id}`);
   } else {
-    toast('Patron enregistré');
+    toast(updated ? `Patron enregistré · ${updated} projet${updated > 1 ? 's' : ''} mis à jour` : 'Patron enregistré');
     const back = ui.patternBack;
     ui.patternBack = null;
     go(back || `#/patron/${saved.id}`);
