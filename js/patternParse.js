@@ -30,6 +30,15 @@ const COLOUR_QTY = /(colou?r|couleur|coloris)\s*([A-Z])\s*[:\-]\s*(\d+(?:[.,]\d+
 const COLOUR_CODE = /^(\d{2,4})\s+([\p{L}][\p{L}' -]{1,40}?)\s*(?:\(\s*=?\s*([A-Za-z])\s*\))?\s*$/u;
 const HOOK_FR = /^(?:avec\s+)?(?:un\s+)?crochet\s*(?:n[°o]\s*)?(\d+(?:[.,]\d+)?)\s*(?:mm)?\s*$/i;
 
+// Listes à puces françaises : « une pelote de marron », « un peu de bleu et de noir »
+const NB_WORDS = { un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5 };
+const SKEIN_LINE = /^(\d+|une?|deux|trois|quatre|cinq)\s+(?:pelotes?|boules?|skeins?)\s+(?:de\s+|d['’]\s*|en\s+)(.+)$/i;
+const SCRAPS_LINE = /^(?:un\s+peu|un\s+reste|des\s+restes?|quelques\s+restes?|un\s+fond|une\s+chute|des\s+chutes?)\s+(?:de\s+|d['’]\s*|en\s+)(.+)$/i;
+// Phrase d'introduction : « crocheté avec du coton Natura de chez DMC »
+const YARN_HINT = /(?:crochet[ée]e?s?|r[ée]alis[ée]e?s?|faite?s?|tricot[ée]e?s?)\s+(?:avec|en)\s+(?:(?:du|de la|de l['’]|des|le|la|l['’])\s*)?(.+?)\s+(?:de chez|chez|de la marque)\s+(\p{Lu}[\p{L}&.'-]*(?:\s+\p{Lu}[\p{L}&.'-]*)?)/u;
+const FIBRE_WORD = /^(coton|laine|acrylique|fil|polyester|lin|bambou|viscose|soie)$/i;
+const BULLET = /^[●•▪■◦‣·*\-–—]\s/;
+
 const HOOK_AFTER = /(?:crochet|hook|aiguille)[^\d\n]{0,25}(\d+(?:[.,]\d+)?)\s*mm/i;
 const HOOK_BEFORE = /(\d+(?:[.,]\d+)?)\s*mm\s*(?:\(|\[)?[^\n]{0,12}(?:crochet|hook)/i;
 
@@ -96,10 +105,12 @@ function cleanLabel(line) {
 }
 
 /** Une ligne de phrase (consigne, avertissement) n'est pas une ligne de matériel. */
-function looksLikeProse(line, hasQuantity) {
+function looksLikeProse(line, hasQuantity, bullet = false) {
   if (hasQuantity) return false;
-  if (/^[a-zà-ÿ]/.test(line)) return true; // suite d'une phrase coupée
+  if (!bullet && /^[a-zà-ÿ]/.test(line)) return true; // suite d'une phrase coupée
   if (line.length > 75) return true;
+  if (line.split(/\s+/).length >= 10) return true; // phrase d'introduction
+  if (/\s(?:et|ou|de|du|des|la|le|un|une|avec|en)$/i.test(line)) return true; // phrase coupée en fin de ligne
   if (/[.;]$/.test(line) && line.split(/\s+/).length > 6) return true;
   return false;
 }
@@ -114,17 +125,20 @@ function readRegion(lines, startIdx) {
   return idx;
 }
 
-function readMaterial(raw) {
+function readMaterial(raw, bullet = false) {
   const line = cleanLabel(raw);
   if (line.length < 3) return null;
   if (SECTION_START.test(line) && line.length < 28) return null;
   if (SKIP_LINE.test(line)) return null;
   const q = parseQuantities(line);
   const hasQuantity = !!(q.grams || q.meters || q.skeins);
-  if (looksLikeProse(line, hasQuantity)) return null;
+  if (looksLikeProse(line, hasQuantity, bullet)) return null;
   const hook = line.match(HOOK_AFTER) || line.match(HOOK_BEFORE);
   if (hook) return { kind: 'hook', label: line, size: num(hook[1]) };
-  if (ALWAYS_ACCESSORY.test(line) || (ACCESSORY_WORDS.test(line) && !hasQuantity)) return { kind: 'accessory', label: line };
+  if (ALWAYS_ACCESSORY.test(line) || (ACCESSORY_WORDS.test(line) && !hasQuantity)) {
+    const label = line.replace(/^(?:du|de la|des|de l['’]|un|une)\s+/i, '');
+    return { kind: 'accessory', label: label.charAt(0).toUpperCase() + label.slice(1) };
+  }
   const weight = detectWeight(line);
   const looksLikeYarn = /(fil|yarn|laine|wool|coton|cotton|acrylique|acrylic|pelote|skein|mohair|bambou|lin)\b/i.test(line);
   if (looksLikeYarn || hasQuantity) {
@@ -177,14 +191,61 @@ function readVariants(lines, baseLabels) {
   return found;
 }
 
+/** « une pelote de marron », « un peu de bleu et de noir » → lignes de fil (une par coloris). */
+function yarnFromList(line, hint) {
+  const sk = line.match(SKEIN_LINE);
+  const sc = !sk && line.match(SCRAPS_LINE);
+  const m = sk || sc;
+  if (!m) return null;
+  const phrase = (sk ? sk[2] : sc[1])
+    .replace(/\s*\(.*$/, '')
+    .replace(/\s*[:–-]\s*\d.*$/, '')
+    .replace(/[.;]+$/, '')
+    .trim();
+  const colours = phrase
+    .split(/\s*(?:,|\bet\b)\s*(?:de\s+|d['’]\s*)?/i)
+    .map((c) => c.trim())
+    .filter(Boolean);
+  if (!colours.length || colours.some((c) => c.split(/\s+/).length > 3 || /\d/.test(c))) return null;
+  const q = sk ? parseQuantities(line) : {};
+  if (sk) {
+    const w = sk[1].toLowerCase();
+    q.skeins = /^\d+$/.test(w) ? parseInt(w, 10) : NB_WORDS[w];
+  }
+  const label = hint ? hint.label : 'Fil';
+  return colours.map((c) => ({
+    kind: 'yarn',
+    label,
+    colorName: c,
+    colorKey: guessColorKey(c),
+    weightCategory: detectWeight(label),
+    ...q,
+    ...(sc ? { scraps: true } : {}),
+  }));
+}
+
+/** Fil cité dans une phrase d'introduction : « coton Natura de chez DMC » → « DMC Natura (coton) ». */
+function yarnHintFrom(line) {
+  const m = line.match(YARN_HINT);
+  if (!m) return null;
+  const words = m[1].trim().split(/\s+/);
+  const fibre = FIBRE_WORD.test(words[0]) ? words.shift() : '';
+  const rest = words.join(' ');
+  const label = `${m[2]} ${rest}`.trim() + (fibre && rest ? ` (${fibre})` : fibre ? ` ${fibre}` : '');
+  return { label };
+}
+
 /** Lit les lignes d'une zone « matériel », en gardant la marque courante pour les lignes de coloris. */
 function readRows(lines, idxs) {
   const out = [];
   let brand = '';
+  let hint = null; // fil cité dans la phrase d'introduction
   let fresh = false; // la ligne précédente était la marque : une parenthèse à la suite la complète
   for (const i of idxs) {
     const l = cleanLabel(lines[i]);
     if (l.length < 2) continue;
+    const bullet = BULLET.test(lines[i]);
+    if (!bullet) hint = yarnHintFrom(l) || hint;
     const code = brand && l.match(COLOUR_CODE);
     if (code) {
       const letter = code[3] ? ` (${code[3].toUpperCase()})` : '';
@@ -199,11 +260,17 @@ function readRows(lines, idxs) {
       fresh = false;
       continue;
     }
+    const listed = yarnFromList(l, hint);
+    if (listed) {
+      out.push(...listed);
+      fresh = false;
+      continue;
+    }
     if (fresh && /^\(/.test(l) && brand.length < 60) {
       brand += ' ' + l;
       continue;
     }
-    const m = readMaterial(lines[i]);
+    const m = readMaterial(lines[i], bullet);
     if (m) {
       out.push(m);
       fresh = false;
@@ -256,9 +323,14 @@ export function parsePattern(text) {
     for (const s of starts) for (const i of readRegion(lines, s)) if (!used.has(i)) (used.add(i), regionLines.push(i));
   }
   let materials = readRows(lines, regionLines);
+  // Taille du crochet donnée sur la couverture (« Taille du crochet : 2 ») si le matériel n'en cite aucun
+  if (!materials.some((m) => m.kind === 'hook')) {
+    const cover = lines.slice(0, 40).join('\n').match(/taille du crochet\s*:?\s*(\d+(?:[.,]\d+)?)/i);
+    if (cover) materials.unshift({ kind: 'hook', label: `Crochet ${cover[1].replace('.', ',')} mm`, size: num(cover[1]) });
+  }
 
   // Lignes de fil sans quantité (« Cotton fingering yarn ») : simple description, on garde l'épaisseur
-  const hasQty = (y) => y.grams || y.meters || y.skeins;
+  const hasQty = (y) => y.grams || y.meters || y.skeins || y.scraps;
   const yarns = materials.filter((m) => m.kind === 'yarn');
   const sized = yarns.filter(hasQty);
   let baseName = '';

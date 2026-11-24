@@ -170,3 +170,39 @@ test('famille de couleur devinée depuis le nom du coloris', () => {
   assert.equal(guessColorKey('Taupe'), 'marron');
   assert.equal(guessColorKey('Zzz'), '');
 });
+
+const DJINN = `Flint le Djinn de Golden Sun
+par Monster Hook
+Taille du crochet : 2
+Matériel
+Le Djinn du tuto est crocheté avec du coton Natura de chez DMC et un
+crochet 2. Vous pouvez aussi bien le faire avec de la laine, selon vos
+envies, et un crochet plus gros ou plus petit (adapté au fil choisi).
+● un crochet 2
+● une pelote de marron
+● une pelote de marron clair
+● un peu de bleu et de noir
+● une aiguille à laine
+● du rembourrage
+● une paire de ciseaux
+Astuces
+● Afin d’avoir de jolies mailles serrées, j’utilise un crochet deux
+tailles en dessous de ce qui est indiqué sur la bague des pelotes.
+Abréviations
+Maille serrée : ms`;
+
+test('patron français à puces : pelotes, petites quantités, fil cité dans l\'introduction', () => {
+  const r = parsePattern(DJINN);
+  const yarns = r.materials.filter((m) => m.kind === 'yarn');
+  assert.equal(yarns.length, 4);
+  assert.deepEqual(yarns.map((y) => y.colorName), ['marron', 'marron clair', 'bleu', 'noir']);
+  assert.ok(yarns.every((y) => y.label === 'DMC Natura (coton)'));
+  assert.equal(yarns[0].skeins, 1);
+  assert.equal(yarns[0].colorKey, 'marron');
+  assert.equal(yarns[2].scraps, true);
+  assert.equal(yarns[3].colorKey, 'noir');
+  assert.equal(r.materials.filter((m) => m.kind === 'hook').length, 1);
+  assert.equal(r.materials.find((m) => m.kind === 'hook').size, 2);
+  // la phrase d'introduction n'est pas une ligne de fil ; l'aiguille et les ciseaux sont des outils
+  assert.equal(r.materials.filter((m) => m.kind === 'accessory').map((m) => m.label).join(), 'Rembourrage');
+});
