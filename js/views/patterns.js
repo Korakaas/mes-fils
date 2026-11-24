@@ -1,7 +1,7 @@
 import * as store from '../store.js';
 import * as L from '../logic.js';
 import { parsePattern, applyVariant } from '../patternParse.js';
-import { extractPdfText, renderPdf, shrinkImage, ocrImages } from '../media.js';
+import { extractPdfText, renderPdf, shrinkImage, trimScreenshot, ocrImages } from '../media.js';
 import {
   ui, actions, inputs, submits, esc, icons, topbar, data, go, toast, confirmSheet, pickFile, pickFiles, patternFiles, toastHold, toNum, numStr, yarnTitle, emptyState, photoAttrs, hydratePhotos, rerender,
 } from '../ctx.js';
@@ -103,7 +103,7 @@ async function storeImages(list) {
   const files = [];
   const blobs = [];
   for (const f of list) {
-    const blob = await shrinkImage(f, 2200, 0.85);
+    const blob = await shrinkImage(await trimScreenshot(f), 2200, 0.85);
     blobs.push(blob);
     files.push({ id: await store.putBlob(blob, f.name), name: f.name, type: 'image' });
   }
@@ -229,19 +229,26 @@ function field(label, name, value, { type = 'text', ph = '', unit = '' } = {}) {
 }
 
 function filesSection(files, id) {
+  const n = files.length;
   const rows = files
     .map(
-      (f, i) => `<div class="card" style="display:flex;align-items:center;gap:10px;padding:10px">
-        <span class="thumb" style="width:44px;height:44px;border-radius:10px;flex:none;background-color:#f1e8de;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted)" ${f.type === 'image' ? photoAttrs(f.id, '') : ''}>${f.type === 'image' ? '' : 'PDF'}</span>
-        <span style="flex:1;min-width:0;overflow-wrap:anywhere;font-size:13.5px">${esc(f.name || 'Fichier')}</span>
-        <button type="button" class="linkbtn" style="color:var(--bad)" data-act="pattern.removeFile" data-idx="${i}" aria-label="Retirer ${esc(f.name || 'ce fichier')}">Retirer</button></div>`,
+      (f, i) => `<div class="card frow" data-fidx="${i}">
+        <span class="grip" data-grip aria-label="Glisser pour changer l’ordre" role="img" title="Glisser pour changer l’ordre">⠿</span>
+        <span class="fnum">${i + 1}</span>
+        <span class="thumb fthumb" ${f.type === 'image' ? photoAttrs(f.id, '') : ''}>${f.type === 'image' ? '' : 'PDF'}</span>
+        <span class="fname">${esc(f.name || 'Fichier')}</span>
+        <span class="fbtns">
+          <button type="button" class="iconbtn ghost" data-act="pattern.moveFile" data-from="${i}" data-to="${i - 1}" aria-label="Monter ${esc(f.name || 'ce fichier')}" ${i === 0 ? 'disabled' : ''}>↑</button>
+          <button type="button" class="iconbtn ghost" data-act="pattern.moveFile" data-from="${i}" data-to="${i + 1}" aria-label="Descendre ${esc(f.name || 'ce fichier')}" ${i === n - 1 ? 'disabled' : ''}>↓</button>
+          <button type="button" class="linkbtn" style="color:var(--bad)" data-act="pattern.removeFile" data-idx="${i}" aria-label="Retirer ${esc(f.name || 'ce fichier')}">Retirer</button></span></div>`,
     )
     .join('');
-  return `<div class="section" style="margin-top:0"><h2>Instructions${files.length ? `<small>${files.length} fichier${files.length > 1 ? 's' : ''}</small>` : ''}</h2>
-    <div class="stack">${rows || '<p class="hint">Ajoute le PDF du patron et des photos (pages, schémas, résultat) pour tout garder ici et le suivre pendant que tu crochètes.</p>'}</div>
+  return `<div class="section" style="margin-top:0"><h2>Instructions${n ? `<small>${n} fichier${n > 1 ? 's' : ''}</small>` : ''}</h2>
+    ${n > 1 ? '<p class="hint" style="margin:-4px 0 8px">Remets les pages dans l’ordre où tu les suivras : glisse ⠿ ou utilise les flèches.</p>' : ''}
+    <div class="stack" data-filelist>${rows || '<p class="hint">Ajoute le PDF du patron et des photos (pages, schémas, résultat) pour tout garder ici et le suivre pendant que tu crochètes.</p>'}</div>
     <div class="row" style="margin:10px 0 16px"><button type="button" class="btn small" data-act="pattern.addPdf">+ PDF</button>
       <button type="button" class="btn small" data-act="pattern.addPhotos">+ Photos</button>
-      ${files.length ? `<button type="button" class="btn small primary" data-act="pattern.read" data-id="${esc(id)}">Lire les instructions</button>` : ''}</div>
+      ${n ? `<button type="button" class="btn small primary" data-act="pattern.read" data-id="${esc(id)}">Lire les instructions</button>` : ''}</div>
     ${files.some((f) => f.type === 'image') ? '<button type="button" class="linkbtn" style="margin:-6px 0 14px" data-act="pattern.ocr">Lire le matériel sur les photos</button>' : ''}</div>`;
 }
 
@@ -472,6 +479,83 @@ actions['pattern.ocr'] = () => {
   });
 };
 
+function moveFile(from, to) {
+  if (from === to || to < 0) return;
+  changeFiles(async (cur) => {
+    if (to >= cur.files.length) return null;
+    const [f] = cur.files.splice(from, 1);
+    cur.files.splice(to, 0, f);
+    return cur;
+  });
+}
+
+actions['pattern.moveFile'] = (el) => moveFile(Number(el.dataset.from), Number(el.dataset.to));
+
+/** Glisser-déposer des fichiers par la poignée (souris ou doigt), avec défilement automatique près des bords. */
+function bindFileDrag() {
+  const list = document.querySelector('[data-filelist]');
+  if (!list || list.dataset.bound) return;
+  list.dataset.bound = '1';
+  list.addEventListener('pointerdown', (e) => {
+    const grip = e.target.closest('[data-grip]');
+    if (!grip) return;
+    e.preventDefault();
+    const rows = [...list.querySelectorAll('[data-fidx]')];
+    const row = grip.closest('[data-fidx]');
+    const from = rows.indexOf(row);
+    const centers = rows.map((r) => {
+      const b = r.getBoundingClientRect();
+      return b.top + window.scrollY + b.height / 2;
+    });
+    const step = rows.length > 1 ? centers[1] - centers[0] : 0;
+    const startY = e.clientY;
+    const startScroll = window.scrollY;
+    let lastY = startY;
+    let to = from;
+    grip.setPointerCapture(e.pointerId);
+    row.classList.add('dragging');
+    const update = () => {
+      const dy = lastY - startY + (window.scrollY - startScroll);
+      row.style.transform = `translateY(${dy}px)`;
+      const y = centers[from] + dy;
+      let best = 0;
+      centers.forEach((c, i) => {
+        if (Math.abs(c - y) < Math.abs(centers[best] - y)) best = i;
+      });
+      to = best;
+      rows.forEach((r, i) => {
+        if (r === row) return;
+        let shift = 0;
+        if (from < to && i > from && i <= to) shift = -step;
+        if (from > to && i < from && i >= to) shift = step;
+        r.style.transform = shift ? `translateY(${shift}px)` : '';
+      });
+    };
+    const timer = setInterval(() => {
+      const edge = 90;
+      if (lastY > window.innerHeight - edge) window.scrollBy(0, 12);
+      else if (lastY < edge + 60) window.scrollBy(0, -12);
+      update();
+    }, 16);
+    const move = (ev) => {
+      lastY = ev.clientY;
+      update();
+    };
+    const end = () => {
+      clearInterval(timer);
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', end);
+      grip.removeEventListener('pointercancel', end);
+      rows.forEach((r) => (r.style.transform = ''));
+      row.classList.remove('dragging');
+      moveFile(from, to);
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', end);
+    grip.addEventListener('pointercancel', end);
+  });
+}
+
 actions['pattern.removeFile'] = (el) => {
   const idx = Number(el.dataset.idx);
   changeFiles(async (cur) => {
@@ -574,11 +658,45 @@ submits['pattern.save'] = async (form) => {
 
 // ---------- Lecture du patron ----------
 
+const readerPref = {
+  get() {
+    try {
+      return localStorage.getItem('mesfils.reader') === 'scroll' ? 'scroll' : 'book';
+    } catch (e) {
+      return 'book';
+    }
+  },
+  set(v) {
+    try {
+      localStorage.setItem('mesfils.reader', v);
+    } catch (e) {
+      /* préférence facultative */
+    }
+  },
+  getPos(id) {
+    try {
+      return Number(localStorage.getItem('mesfils.pos.' + id)) || 0;
+    } catch (e) {
+      return 0;
+    }
+  },
+  setPos(id, n) {
+    try {
+      localStorage.setItem('mesfils.pos.' + id, String(n));
+    } catch (e) {
+      /* facultatif */
+    }
+  },
+};
+
+const rd = { id: '', cur: 0, total: 0 };
+
 export function renderReader(id, projectId) {
   const p = patternFromId(id);
   if (!p) return `${topbar('Patron introuvable', { backHref: '#/patrons' })}`;
   const back = projectId ? `#/projet/${projectId}` : id === 'brouillon' ? '#/patron/brouillon' : `#/patron/${id}`;
   const files = patternFiles(p);
+  const mode = readerPref.get();
   const open = p.link ? `<a class="btn small" href="${esc(p.link)}" target="_blank" rel="noopener">Ouvrir le lien</a>` : '';
   const body = files.length
     ? files
@@ -589,9 +707,80 @@ export function renderReader(id, projectId) {
         )
         .join('')
     : `<p class="hint">Ce patron n’a pas de fichier. Ajoute un PDF ou des photos depuis la fiche du patron.</p>${open}`;
+  const seg = (m, label) => `<button type="button" aria-pressed="${mode === m}" data-act="reader.mode" data-mode="${m}">${label}</button>`;
+  const bar = files.length
+    ? `<div class="rbar"><div class="seg" role="group" aria-label="Affichage">${seg('book', 'Livret')}${seg('scroll', 'Défilement')}</div></div>`
+    : '';
+  const nav = files.length
+    ? `<div class="rnav" id="rnav"><button type="button" class="iconbtn" data-act="reader.prev" aria-label="Page précédente">‹</button><span id="rcount" aria-live="polite">Page 1</span><button type="button" class="iconbtn" data-act="reader.next" aria-label="Page suivante">›</button></div>`
+    : '';
   return `${topbar(p.title || 'Patron', { backHref: back })}
-    <div class="reader" id="reader">${files.length ? '<p class="hint" style="margin:0">L’écran reste allumé pendant la lecture. Pince l’écran pour zoomer.</p>' : ''}${body}${files.length ? open : ''}</div>`;
+    <div class="reader ${mode}" id="reader" data-pid="${esc(id)}">${bar}<div class="pages" id="pages">${body}</div>${nav}${files.length ? `<p class="hint rhint" style="margin:6px 0 0">L’écran reste allumé pendant la lecture. Pince l’écran pour zoomer.</p>` : ''}${files.length ? open : ''}</div>`;
 }
+
+function rpages() {
+  return [...document.querySelectorAll('#pages .rpage')];
+}
+
+function showPage(idx, smooth = true) {
+  const pages = rpages();
+  if (!pages.length) return;
+  const i = Math.max(0, Math.min(pages.length - 1, idx));
+  const box = document.getElementById('pages');
+  const book = document.getElementById('reader').classList.contains('book');
+  if (book) box.scrollTo({ left: i * box.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
+  else pages[i].scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' });
+  setCurrent(i);
+}
+
+function setCurrent(i) {
+  rd.cur = i;
+  rd.total = rpages().length;
+  const c = document.getElementById('rcount');
+  if (c) c.textContent = `Page ${i + 1} / ${rd.total}`;
+  if (rd.id) readerPref.setPos(rd.id, i);
+}
+
+function bindReaderScroll() {
+  const box = document.getElementById('pages');
+  let raf = 0;
+  const update = () => {
+    raf = 0;
+    const book = document.getElementById('reader')?.classList.contains('book');
+    const pages = rpages();
+    if (!pages.length) return;
+    if (book) setCurrent(Math.round(box.scrollLeft / Math.max(1, box.clientWidth)));
+    else {
+      const first = pages.findIndex((pg) => pg.getBoundingClientRect().bottom > 140);
+      setCurrent(first < 0 ? pages.length - 1 : first);
+    }
+  };
+  const onScroll = () => {
+    if (!raf) raf = requestAnimationFrame(update);
+  };
+  box.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('scroll', onScroll, { passive: true });
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!/^#\/lire\//.test(location.hash) || /input|textarea|select/i.test(e.target.tagName)) return;
+  if (!document.getElementById('reader')?.classList.contains('book')) return;
+  if (e.key === 'ArrowRight') showPage(rd.cur + 1);
+  if (e.key === 'ArrowLeft') showPage(rd.cur - 1);
+});
+
+actions['reader.mode'] = (el) => {
+  const mode = el.dataset.mode;
+  readerPref.set(mode);
+  const box = document.getElementById('reader');
+  box.classList.toggle('book', mode === 'book');
+  box.classList.toggle('scroll', mode === 'scroll');
+  box.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+  const keep = rd.cur;
+  requestAnimationFrame(() => showPage(keep, false));
+};
+actions['reader.prev'] = () => showPage(rd.cur - 1);
+actions['reader.next'] = () => showPage(rd.cur + 1);
 
 let wakeLock = null;
 async function keepAwake() {
@@ -620,30 +809,40 @@ document.addEventListener('visibilitychange', () => {
 export async function afterReader() {
   const box = document.getElementById('reader');
   if (!box) return;
+  rd.id = box.dataset.pid || '';
   keepAwake();
+  const pagesBox = document.getElementById('pages');
+  const width = Math.max(280, pagesBox.clientWidth || 360);
   for (const sec of box.querySelectorAll('.rfile')) {
     const body = sec.querySelector('.rbody');
     const rec = await store.loadBlob(sec.dataset.fid);
     if (!body.isConnected) return; // on a quitté l'écran entre-temps
     if (!rec) {
-      body.innerHTML = '<p class="hint">Ce fichier n’est pas encore disponible sur cet appareil. Connecte-toi à la synchro puis réessaie.</p>';
+      body.innerHTML = '<div class="rpage"><p class="hint">Ce fichier n’est pas encore disponible sur cet appareil. Connecte-toi à la synchro puis réessaie.</p></div>';
       continue;
     }
     if (sec.dataset.type === 'image' || (rec.type || '').startsWith('image/')) {
       const url = await store.blobUrl(rec.id);
-      body.innerHTML = `<img alt="${esc(sec.querySelector('.rtitle') ? 'Page du patron' : 'Patron')}" src="${url}">`;
+      body.innerHTML = `<div class="rpage"><img alt="Page du patron" src="${url}"></div>`;
       continue;
     }
     try {
-      await renderPdf(rec.blob, body);
+      await renderPdf(rec.blob, body, { perPage: true, width });
     } catch (e) {
       const url = await store.blobUrl(rec.id);
-      body.innerHTML = `<p class="hint">Impossible d’afficher ce PDF ici.</p><a class="btn" href="${url}" target="_blank" rel="noopener">Ouvrir dans une autre appli</a>`;
+      body.innerHTML = `<div class="rpage"><p class="hint">Impossible d’afficher ce PDF ici.</p><a class="btn" href="${url}" target="_blank" rel="noopener">Ouvrir dans une autre appli</a></div>`;
     }
   }
+  if (!rpages().length) return;
+  const saved = readerPref.getPos(rd.id);
+  bindReaderScroll();
+  setCurrent(0);
+  if (saved > 0 && saved < rpages().length) setTimeout(() => showPage(saved, false), 60);
+  else if (rd.id) readerPref.setPos(rd.id, 0);
 }
 
 export function afterPatterns() {
   hydratePhotos(document.getElementById('view'));
+  bindFileDrag();
 }
 

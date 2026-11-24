@@ -68,11 +68,11 @@ export async function extractPdfText(blob) {
 }
 
 /** Dessine les pages d'un PDF dans un conteneur, à la largeur disponible. */
-export async function renderPdf(blob, container, { onProgress } = {}) {
+export async function renderPdf(blob, container, { onProgress, perPage = false, width: forcedWidth = 0 } = {}) {
   const pdfjs = await loadPdfjs();
   const data = new Uint8Array(await blob.arrayBuffer());
   const doc = await pdfjs.getDocument({ data }).promise;
-  const width = Math.max(280, container.clientWidth || 360);
+  const width = Math.max(280, forcedWidth || container.clientWidth || 360);
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   container.innerHTML = '';
   for (let i = 1; i <= doc.numPages; i++) {
@@ -83,11 +83,21 @@ export async function renderPdf(blob, container, { onProgress } = {}) {
     const canvas = document.createElement('canvas');
     canvas.width = Math.floor(vp.width);
     canvas.height = Math.floor(vp.height);
-    canvas.style.width = width + 'px';
-    canvas.style.height = Math.floor(vp.height / dpr) + 'px';
+    if (perPage) {
+      canvas.style.width = '100%';
+      canvas.style.height = 'auto';
+    } else {
+      canvas.style.width = width + 'px';
+      canvas.style.height = Math.floor(vp.height / dpr) + 'px';
+    }
     canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-label', `Page ${i} sur ${doc.numPages}`);
-    container.appendChild(canvas);
+    if (perPage) {
+      const wrap = document.createElement('div');
+      wrap.className = 'rpage';
+      wrap.appendChild(canvas);
+      container.appendChild(wrap);
+    } else container.appendChild(canvas);
     await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
     if (onProgress) onProgress(i, doc.numPages);
   }
@@ -115,45 +125,71 @@ function loadTesseract() {
 
 /**
  * Captures d'écran de réseaux sociaux (mode sombre) : la page de patron est la bande claire au milieu,
- * entourée d'une barre sombre en haut (compte, « Suivi(e) ») et en bas (likes, commentaires). On ne lit que cette bande,
- * sinon ces textes se mélangent au patron. Sans bandes sombres nettes, l'image est lue en entier.
+ * entourée d'une barre sombre en haut (compte, « Suivi(e) ») et en bas (likes, commentaires). On ne lit que cette bande.
+ * Sans bandes sombres nettes, l'image est utilisée en entier.
  */
+function findPageBand(bm) {
+  const W = bm.width, H = bm.height;
+  if (H / W < 1.6) return null;
+  const sw = 120, sh = Math.round((H / W) * 120);
+  const c = document.createElement('canvas');
+  c.width = sw; c.height = sh;
+  const x = c.getContext('2d', { willReadFrequently: true });
+  x.drawImage(bm, 0, 0, sw, sh);
+  const d = x.getImageData(0, 0, sw, sh).data;
+  const bright = [];
+  for (let y = 0; y < sh; y++) {
+    let sum = 0;
+    for (let i = 0; i < sw; i++) {
+      const k = (y * sw + i) * 4;
+      sum += 0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2];
+    }
+    bright.push(sum / sw > 75);
+  }
+  // plus longue série de lignes claires
+  let best = [0, 0], start = -1;
+  for (let y = 0; y <= sh; y++) {
+    if (y < sh && bright[y]) { if (start < 0) start = y; }
+    else if (start >= 0) { if (y - start > best[1] - best[0]) best = [start, y]; start = -1; }
+  }
+  const frac = (best[1] - best[0]) / sh;
+  // il faut une vraie barre sombre en haut ET en bas, sinon ce n'est pas une capture de ce type
+  if (frac < 0.3 || frac > 0.85 || best[0] < sh * 0.06 || sh - best[1] < sh * 0.06) return null;
+  return [Math.round((best[0] / sh) * H), Math.round((best[1] / sh) * H)];
+}
+
 async function cropToPage(blob) {
   try {
     const bm = await createImageBitmap(blob);
-    const W = bm.width, H = bm.height;
-    if (H / W < 1.6) return blob;
-    const sw = 120, sh = Math.round((H / W) * 120);
-    const c = document.createElement('canvas');
-    c.width = sw; c.height = sh;
-    const x = c.getContext('2d', { willReadFrequently: true });
-    x.drawImage(bm, 0, 0, sw, sh);
-    const d = x.getImageData(0, 0, sw, sh).data;
-    const bright = [];
-    for (let y = 0; y < sh; y++) {
-      let sum = 0;
-      for (let i = 0; i < sw; i++) {
-        const k = (y * sw + i) * 4;
-        sum += 0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2];
-      }
-      bright.push(sum / sw > 75);
-    }
-    // plus longue série de lignes claires
-    let best = [0, 0], start = -1;
-    for (let y = 0; y <= sh; y++) {
-      if (y < sh && bright[y]) { if (start < 0) start = y; }
-      else if (start >= 0) { if (y - start > best[1] - best[0]) best = [start, y]; start = -1; }
-    }
-    const frac = (best[1] - best[0]) / sh;
-    if (frac < 0.3 || frac > 0.85) { bm.close?.(); return blob; }
-    const y0 = Math.round((best[0] / sh) * H), y1 = Math.round((best[1] / sh) * H);
+    const band = findPageBand(bm);
+    if (!band) { bm.close?.(); return blob; }
+    const [y0, y1] = band;
     const out = document.createElement('canvas');
-    out.width = W; out.height = y1 - y0;
-    out.getContext('2d').drawImage(bm, 0, y0, W, y1 - y0, 0, 0, W, y1 - y0);
+    out.width = bm.width; out.height = y1 - y0;
+    out.getContext('2d').drawImage(bm, 0, y0, bm.width, y1 - y0, 0, 0, bm.width, y1 - y0);
     bm.close?.();
     return out;
   } catch (e) {
     return blob;
+  }
+}
+
+/** À l'import : retire les barres sombres d'une capture de réseau social, pour que chaque page du livret soit la page du patron. */
+export async function trimScreenshot(file) {
+  try {
+    if (!file.type.startsWith('image/')) return file;
+    const bm = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const band = findPageBand(bm);
+    if (!band) { bm.close?.(); return file; }
+    const [y0, y1] = band;
+    const out = document.createElement('canvas');
+    out.width = bm.width; out.height = y1 - y0;
+    out.getContext('2d').drawImage(bm, 0, y0, bm.width, y1 - y0, 0, 0, bm.width, y1 - y0);
+    bm.close?.();
+    const blob = await new Promise((res) => out.toBlob(res, 'image/jpeg', 0.92));
+    return blob || file;
+  } catch (e) {
+    return file;
   }
 }
 
