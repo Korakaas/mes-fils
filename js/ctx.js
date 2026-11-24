@@ -271,7 +271,25 @@ actions['lightbox.delete'] = async () => {
 
 // ---------- Choix d'un fichier ----------
 
-export function pickFile({ accept, capture = false }) {
+/** Fichiers d'un patron : la liste `files`, ou l'ancien fichier unique des patrons déjà enregistrés. */
+export function patternFiles(p) {
+  if (!p) return [];
+  if (Array.isArray(p.files)) return p.files;
+  return p.fileId ? [{ id: p.fileId, name: p.fileName || 'Fichier du patron', type: p.fileType === 'image' ? 'image' : 'pdf' }] : [];
+}
+
+/** Choisit un ou plusieurs fichiers ; renvoie un tableau (vide si annulé). */
+export async function pickFiles({ accept }) {
+  const input = document.getElementById('file-input');
+  input.multiple = true;
+  try {
+    return await pickFile({ accept, multiple: true });
+  } finally {
+    input.multiple = false;
+  }
+}
+
+export function pickFile({ accept, capture = false, multiple = false }) {
   return new Promise((resolve) => {
     const input = document.getElementById('file-input');
     input.value = '';
@@ -284,11 +302,12 @@ export function pickFile({ accept, capture = false }) {
     };
     const onChange = () => {
       done();
-      resolve(input.files && input.files[0] ? input.files[0] : null);
+      const list = input.files ? [...input.files] : [];
+      resolve(multiple ? list : list[0] || null);
     };
     const onCancel = () => {
       done();
-      resolve(null);
+      resolve(multiple ? [] : null);
     };
     input.addEventListener('change', onChange);
     input.addEventListener('cancel', onCancel);

@@ -3,7 +3,7 @@ import * as L from '../logic.js';
 import { parsePattern, applyVariant } from '../patternParse.js';
 import { extractPdfText, renderPdf, shrinkImage } from '../media.js';
 import {
-  ui, actions, inputs, submits, esc, icons, topbar, data, go, toast, confirmSheet, pickFile, toNum, numStr, yarnTitle, emptyState, photoAttrs, hydratePhotos, rerender,
+  ui, actions, inputs, submits, esc, icons, topbar, data, go, toast, confirmSheet, pickFile, pickFiles, patternFiles, toNum, numStr, yarnTitle, emptyState, photoAttrs, hydratePhotos, rerender,
 } from '../ctx.js';
 
 // ---------- Liste ----------
@@ -71,9 +71,7 @@ actions['pattern.pickPdf'] = async () => {
     }
     ui.draftPattern = {
       title: parsed.title || file.name.replace(/\.pdf$/i, ''),
-      fileId,
-      fileName: file.name,
-      fileType: 'pdf',
+      files: [{ id: fileId, name: file.name, type: 'pdf' }],
       materials: parsed.materials.map(withId),
       variants: parsed.variants || [],
       variantIdx: 0,
@@ -87,16 +85,29 @@ actions['pattern.pickPdf'] = async () => {
 };
 
 actions['pattern.pickImage'] = async () => {
-  const file = await pickFile({ accept: 'image/*' });
-  if (!file) return;
-  const blob = await shrinkImage(file, 2200, 0.85);
-  const fileId = await store.putBlob(blob, file.name);
-  ui.draftPattern = { title: '', fileId, fileName: file.name, fileType: 'image', materials: [], readNote: '', fromRead: false };
-  go('#/patron/brouillon');
+  const picked = await pickFiles({ accept: 'image/*' });
+  if (!picked.length) return;
+  setBusy(true, 'Enregistrement des photos…');
+  try {
+    const files = await storeImages(picked);
+    ui.draftPattern = { title: '', files, materials: [], readNote: '', fromRead: false };
+    go('#/patron/brouillon');
+  } finally {
+    setBusy(false);
+  }
 };
 
+async function storeImages(list) {
+  const files = [];
+  for (const f of list) {
+    const blob = await shrinkImage(f, 2200, 0.85);
+    files.push({ id: await store.putBlob(blob, f.name), name: f.name, type: 'image' });
+  }
+  return files;
+}
+
 actions['pattern.manual'] = () => {
-  ui.draftPattern = { title: '', fileId: null, fileName: '', fileType: '', materials: [], readNote: '', fromRead: false };
+  ui.draftPattern = { title: '', files: [], materials: [], readNote: '', fromRead: false };
   go('#/patron/brouillon');
 };
 
@@ -119,12 +130,13 @@ export function renderPatternEditor(id) {
   const mats = p.materials || [];
   const yarnRows = mats.filter((m) => m.kind === 'yarn');
   const covered = yarnRows.filter((m) => bestSuggestion(m, d).state === 'ok').length;
-  const hasFile = !!p.fileId || !!p.link;
+  const files = patternFiles(p);
+  const hasFile = files.length > 0 || !!p.link;
   return `
     ${topbar(isDraft ? 'Nouveau patron' : 'Patron', { backHref: '#/patrons' })}
     <form id="pattern-form" data-submit="pattern.save" data-id="${isDraft ? '' : esc(p.id)}" novalidate>
       <div class="field"><label for="p-title">Titre</label><input id="p-title" name="title" type="text" value="${esc(p.title || '')}" placeholder="ex. Mushroom Guy" autocomplete="off"></div>
-      ${p.fileType ? `<div class="card" style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><span class="tag">${p.fileType === 'pdf' ? 'PDF' : 'Image'}</span><span class="grow" style="flex:1;min-width:0;overflow-wrap:anywhere;font-size:13.5px">${esc(p.fileName || 'Fichier du patron')}</span><button type="button" class="btn small" data-act="pattern.read" data-id="${esc(isDraft ? 'brouillon' : p.id)}">Lire</button></div>` : ''}
+      ${filesSection(files, isDraft ? 'brouillon' : p.id)}
       <div class="field"><label for="p-link">Lien du patron (facultatif)</label><input id="p-link" name="link" type="url" value="${esc(p.link || '')}" placeholder="https://"></div>
       ${p.readNote ? `<div class="banner warn" style="margin-bottom:12px">${icons.alert}<span>${esc(p.readNote)}</span></div>` : ''}
       ${p.fromRead ? `<div class="banner warn" style="margin-bottom:12px">${icons.alert}<span>À vérifier<span class="sub">L’appli a lu ces lignes dans le PDF : corrige ce qui est faux.</span></span></div>` : ''}
@@ -190,6 +202,22 @@ function needHint(m) {
 
 function field(label, name, value, { type = 'text', ph = '', unit = '' } = {}) {
   return `<div class="field" style="margin:0"><label>${label}<input name="${name}" type="text" inputmode="${type === 'num' ? 'decimal' : 'text'}" value="${esc(type === 'num' ? numStr(value) : value || '')}" placeholder="${esc(ph)}" data-input="pattern.row" style="margin-top:4px"></label></div>`;
+}
+
+function filesSection(files, id) {
+  const rows = files
+    .map(
+      (f, i) => `<div class="card" style="display:flex;align-items:center;gap:10px;padding:10px">
+        <span class="thumb" style="width:44px;height:44px;border-radius:10px;flex:none;background-color:#f1e8de;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted)" ${f.type === 'image' ? photoAttrs(f.id, '') : ''}>${f.type === 'image' ? '' : 'PDF'}</span>
+        <span style="flex:1;min-width:0;overflow-wrap:anywhere;font-size:13.5px">${esc(f.name || 'Fichier')}</span>
+        <button type="button" class="linkbtn" style="color:var(--bad)" data-act="pattern.removeFile" data-idx="${i}" aria-label="Retirer ${esc(f.name || 'ce fichier')}">Retirer</button></div>`,
+    )
+    .join('');
+  return `<div class="section" style="margin-top:0"><h2>Instructions${files.length ? `<small>${files.length} fichier${files.length > 1 ? 's' : ''}</small>` : ''}</h2>
+    <div class="stack">${rows || '<p class="hint">Ajoute le PDF du patron et des photos (pages, schémas, résultat) pour tout garder ici et le suivre pendant que tu crochètes.</p>'}</div>
+    <div class="row" style="margin:10px 0 16px"><button type="button" class="btn small" data-act="pattern.addPdf">+ PDF</button>
+      <button type="button" class="btn small" data-act="pattern.addPhotos">+ Photos</button>
+      ${files.length ? `<button type="button" class="btn small primary" data-act="pattern.read" data-id="${esc(id)}">Lire les instructions</button>` : ''}</div></div>`;
 }
 
 function variantChips(p) {
@@ -305,6 +333,71 @@ actions['pattern.variant'] = (el) => {
   else rerender();
 };
 
+/** Applique un changement de fichiers au patron en cours (brouillon ou enregistré). */
+async function changeFiles(change) {
+  const form = document.getElementById('pattern-form');
+  if (!form) return;
+  const id = form.dataset.id;
+  const cur = id ? currentPatternFromForm(form, store.get('patterns', id)) : keepDraft(form);
+  const next = await change({ ...cur, files: [...patternFiles(cur)] });
+  if (!next) return;
+  if (id) {
+    const { fileId, fileName, fileType, ...rest } = next;
+    await store.put('patterns', { ...rest, photoId: (rest.files.find((f) => f.type === 'image') || {}).id || null });
+  } else ui.draftPattern = next;
+  rerender();
+}
+
+actions['pattern.addPdf'] = async () => {
+  const file = await pickFile({ accept: 'application/pdf,.pdf' });
+  if (!file) return;
+  if (file.size > 50 * 1024 * 1024) {
+    toast('Ce PDF dépasse 50 Mo : choisis un fichier plus léger');
+    return;
+  }
+  await changeFiles(async (cur) => {
+    const fileId = await store.putBlob(file, file.name);
+    cur.files.push({ id: fileId, name: file.name, type: 'pdf' });
+    // Patron sans matériel : on lit le PDF pour pré-remplir
+    if (!(cur.materials || []).length) {
+      try {
+        const { text, hasText } = await extractPdfText(file);
+        if (hasText) {
+          const parsed = parsePattern(text);
+          if (parsed.materials.length) {
+            cur.materials = parsed.materials.map(withId);
+            cur.variants = parsed.variants || [];
+            cur.variantIdx = 0;
+            cur.fromRead = true;
+            if (!cur.title && parsed.title) cur.title = parsed.title;
+          }
+        }
+      } catch (e) {
+        /* la lecture automatique est facultative */
+      }
+    }
+    return cur;
+  });
+};
+
+actions['pattern.addPhotos'] = async () => {
+  const picked = await pickFiles({ accept: 'image/*' });
+  if (!picked.length) return;
+  toast('Enregistrement des photos…');
+  await changeFiles(async (cur) => {
+    cur.files.push(...(await storeImages(picked)));
+    return cur;
+  });
+};
+
+actions['pattern.removeFile'] = (el) => {
+  const idx = Number(el.dataset.idx);
+  changeFiles(async (cur) => {
+    cur.files.splice(idx, 1);
+    return cur;
+  });
+};
+
 actions['pattern.read'] = (el) => {
   const form = document.getElementById('pattern-form');
   if (form && !form.dataset.id) keepDraft(form);
@@ -371,10 +464,8 @@ submits['pattern.save'] = async (form) => {
     materials: cur.materials,
     variants: base.variants || [],
     variantIdx: base.variantIdx || 0,
-    fileId: base.fileId || null,
-    fileName: base.fileName || '',
-    fileType: base.fileType || '',
-    photoId: base.photoId || (base.fileType === 'image' ? base.fileId : null),
+    files: patternFiles(base),
+    photoId: (patternFiles(base).find((f) => f.type === 'image') || {}).id || null,
     createdAt: base.createdAt,
   };
   const saved = await store.put('patterns', doc);
@@ -399,35 +490,72 @@ submits['pattern.save'] = async (form) => {
 
 // ---------- Lecture du patron ----------
 
-export function renderReader(id) {
+export function renderReader(id, projectId) {
   const p = patternFromId(id);
   if (!p) return `${topbar('Patron introuvable', { backHref: '#/patrons' })}`;
-  const back = id === 'brouillon' ? '#/patron/brouillon' : `#/patron/${id}`;
+  const back = projectId ? `#/projet/${projectId}` : id === 'brouillon' ? '#/patron/brouillon' : `#/patron/${id}`;
+  const files = patternFiles(p);
   const open = p.link ? `<a class="btn small" href="${esc(p.link)}" target="_blank" rel="noopener">Ouvrir le lien</a>` : '';
+  const body = files.length
+    ? files
+        .map(
+          (f, i) => `<section class="rfile" data-fid="${esc(f.id)}" data-type="${esc(f.type || '')}">
+            ${files.length > 1 ? `<h2 class="rtitle">${esc(f.name || `Fichier ${i + 1}`)}<small>${i + 1} / ${files.length}</small></h2>` : ''}
+            <div class="rbody"><div class="spinner">Ouverture…</div></div></section>`,
+        )
+        .join('')
+    : `<p class="hint">Ce patron n’a pas de fichier. Ajoute un PDF ou des photos depuis la fiche du patron.</p>${open}`;
   return `${topbar(p.title || 'Patron', { backHref: back })}
-    <div class="reader" id="reader" data-file="${esc(p.fileId || '')}" data-type="${esc(p.fileType || '')}">
-      ${p.fileId ? '<div class="spinner">Ouverture du patron…</div>' : `<p class="hint">Ce patron n’a pas de fichier.</p>${open}`}
-    </div>`;
+    <div class="reader" id="reader">${files.length ? '<p class="hint" style="margin:0">L’écran reste allumé pendant la lecture. Pince l’écran pour zoomer.</p>' : ''}${body}${files.length ? open : ''}</div>`;
 }
+
+let wakeLock = null;
+async function keepAwake() {
+  try {
+    if ('wakeLock' in navigator && !wakeLock) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => {
+        wakeLock = null;
+      });
+    }
+  } catch (e) {
+    wakeLock = null; // pas bloquant : l'écran se mettra simplement en veille
+  }
+}
+function releaseAwake() {
+  if (wakeLock) wakeLock.release().catch(() => {});
+  wakeLock = null;
+}
+window.addEventListener('hashchange', () => {
+  if (!/^#\/lire\//.test(location.hash)) releaseAwake();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && /^#\/lire\//.test(location.hash)) keepAwake();
+});
 
 export async function afterReader() {
   const box = document.getElementById('reader');
-  if (!box || !box.dataset.file) return;
-  const rec = await store.loadBlob(box.dataset.file);
-  if (!rec) {
-    box.innerHTML = '<p class="hint">Le fichier n’est pas encore disponible sur cet appareil. Connecte-toi à la synchro puis réessaie.</p>';
-    return;
-  }
-  if (box.dataset.type === 'image' || (rec.type || '').startsWith('image/')) {
-    const url = await store.blobUrl(rec.id);
-    box.innerHTML = `<img alt="Patron" src="${url}">`;
-    return;
-  }
-  try {
-    await renderPdf(rec.blob, box);
-  } catch (e) {
-    const url = await store.blobUrl(rec.id);
-    box.innerHTML = `<p class="hint">Impossible d’afficher ce PDF ici.</p><a class="btn" href="${url}" target="_blank" rel="noopener">Ouvrir dans une autre appli</a>`;
+  if (!box) return;
+  keepAwake();
+  for (const sec of box.querySelectorAll('.rfile')) {
+    const body = sec.querySelector('.rbody');
+    const rec = await store.loadBlob(sec.dataset.fid);
+    if (!body.isConnected) return; // on a quitté l'écran entre-temps
+    if (!rec) {
+      body.innerHTML = '<p class="hint">Ce fichier n’est pas encore disponible sur cet appareil. Connecte-toi à la synchro puis réessaie.</p>';
+      continue;
+    }
+    if (sec.dataset.type === 'image' || (rec.type || '').startsWith('image/')) {
+      const url = await store.blobUrl(rec.id);
+      body.innerHTML = `<img alt="${esc(sec.querySelector('.rtitle') ? 'Page du patron' : 'Patron')}" src="${url}">`;
+      continue;
+    }
+    try {
+      await renderPdf(rec.blob, body);
+    } catch (e) {
+      const url = await store.blobUrl(rec.id);
+      body.innerHTML = `<p class="hint">Impossible d’afficher ce PDF ici.</p><a class="btn" href="${url}" target="_blank" rel="noopener">Ouvrir dans une autre appli</a>`;
+    }
   }
 }
 

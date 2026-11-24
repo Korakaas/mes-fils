@@ -302,3 +302,9 @@ details.more > .inner { padding-bottom: 4px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* Lecteur d'instructions : plusieurs fichiers l'un sous l'autre */
+.rtitle { font-size: 15px; margin: 6px 0 8px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; overflow-wrap: anywhere; }
+.rtitle small { color: var(--muted); font-weight: 600; font-size: 12.5px; flex: none; }
+.rfile { margin-bottom: 14px; }
+.reader img { margin-bottom: 8px; display: block; }

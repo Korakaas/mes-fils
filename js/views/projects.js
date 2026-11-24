@@ -3,7 +3,7 @@ import * as L from '../logic.js';
 import { shrinkImage } from '../media.js';
 import { slotsFromPattern } from './patterns.js';
 import {
-  ui, actions, inputs, submits, esc, icons, topbar, data, go, toast, confirmSheet, promptSheet, optionsSheet, openSheet, closeSheet, pickFile, toNum, numStr,
+  ui, actions, inputs, submits, esc, icons, topbar, data, go, toast, confirmSheet, promptSheet, optionsSheet, openSheet, closeSheet, pickFile, patternFiles, toNum, numStr,
   yarnTitle, emptyState, photoAttrs, hydratePhotos, rerender, switchRow, paintOverlay,
 } from '../ctx.js';
 
@@ -137,8 +137,8 @@ export function renderProject(id) {
   const cost = L.projectCost(p, d.yarnsById);
   const photos = (p.photos || []).map((ph, i) => `<button type="button" class="ph" aria-label="Voir la photo ${i + 1}" data-act="project.photoOpen" data-idx="${i}" ${photoAttrs(ph, '')}></button>`).join('');
   const patternCard = pattern
-    ? `<a class="listrow" href="#/lire/${esc(pattern.id)}" aria-label="Ouvrir les instructions du patron ${esc(pattern.title)}"><span class="thumb">${icons.doc}</span>
-        <span class="grow"><span class="t">Patron · ${esc(pattern.title)}</span><span class="s">${pattern.fileType === 'pdf' ? 'PDF · ' : pattern.fileType === 'image' ? 'Image · ' : ''}ouvrir les instructions</span></span><span class="chev">${icons.chev}</span></a>`
+    ? `<a class="listrow" href="#/lire/${esc(pattern.id)}/${esc(p.id)}" aria-label="Ouvrir les instructions du patron ${esc(pattern.title)}"><span class="thumb">${icons.doc}</span>
+        <span class="grow"><span class="t">Patron · ${esc(pattern.title)}</span><span class="s">${(() => { const n = patternFiles(pattern).length; return n ? `${n} fichier${n > 1 ? 's' : ''} · ` : ''; })()}ouvrir les instructions</span></span><span class="chev">${icons.chev}</span></a>`
     : `<button type="button" class="btn block" data-act="project.linkPattern">Lier un patron</button>`;
   return `
     ${topbar(p.name, { backHref: '#/projets', right: `<button type="button" class="linkbtn" data-act="project.rename">Renommer</button>` })}

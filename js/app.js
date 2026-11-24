@@ -20,8 +20,8 @@ function route() {
   if ((m = /^#\/fil\/([^/]+)$/.exec(h))) return { name: 'yarn', nav: 'stock', html: () => renderYarn(m[1]), after: () => {} };
   if (h === '#/patrons') return { name: 'patterns', nav: 'patrons', html: renderPatterns, after: afterPatterns };
   if (h === '#/patron/nouveau') return { name: 'pattern-new', nav: null, html: renderPatternNew, after: () => {} };
-  if ((m = /^#\/patron\/([^/]+)$/.exec(h))) return { name: 'pattern', nav: null, html: () => renderPatternEditor(m[1]), after: () => {} };
-  if ((m = /^#\/lire\/([^/]+)$/.exec(h))) return { name: 'reader', nav: null, html: () => renderReader(m[1]), after: afterReader };
+  if ((m = /^#\/patron\/([^/]+)$/.exec(h))) return { name: 'pattern', nav: null, html: () => renderPatternEditor(m[1]), after: afterPatterns };
+  if ((m = /^#\/lire\/([^/]+)(?:\/([^/]+))?$/.exec(h))) return { name: 'reader', nav: null, html: () => renderReader(m[1], m[2]), after: afterReader };
   if (h === '#/projets') return { name: 'projects', nav: 'projets', html: renderProjects, after: afterList };
   if (h === '#/projet/nouveau') return { name: 'project-new', nav: null, html: renderProjectNew, after: () => {} };
   if ((m = /^#\/projet\/([^/]+)\/choisir\/([^/]+)$/.exec(h))) {
