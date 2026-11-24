@@ -25,6 +25,11 @@ const ALWAYS_ACCESSORY = /(rembourrage|polyfill|fiberfill|stuffing|aiguille [àa
 const SKIP_LINE = /\b(scraps?|chutes?|restes? de|strands? of|brins? de)\b|optional|facultatif|optionnel|(ciseaux|scissors|stitch markers?|marqueurs?|pins?|[ée]pingles?|aiguille [àa] laine|tapestry needle|yarn needle|pointy)/i;
 const COLOUR_QTY = /(colou?r|couleur|coloris)\s*([A-Z])\s*[:\-]\s*(\d+(?:[.,]\d+)?)\s*(?:g|gr|grs|grammes?|grams?)\b/gi;
 
+// Format français fréquent : une marque (« Scheepjes Catona »), puis une ligne par coloris (« 105 blanc (= B) »),
+// puis « Avec un crochet 2,5 » (taille sans « mm »).
+const COLOUR_CODE = /^(\d{2,4})\s+([\p{L}][\p{L}' -]{1,40}?)\s*(?:\(\s*=?\s*([A-Za-z])\s*\))?\s*$/u;
+const HOOK_FR = /^(?:avec\s+)?(?:un\s+)?crochet\s*(?:n[°o]\s*)?(\d+(?:[.,]\d+)?)\s*(?:mm)?\s*$/i;
+
 const HOOK_AFTER = /(?:crochet|hook|aiguille)[^\d\n]{0,25}(\d+(?:[.,]\d+)?)\s*mm/i;
 const HOOK_BEFORE = /(\d+(?:[.,]\d+)?)\s*mm\s*(?:\(|\[)?[^\n]{0,12}(?:crochet|hook)/i;
 
@@ -149,6 +154,43 @@ function readVariants(lines, baseLabels) {
   return found;
 }
 
+/** Lit les lignes d'une zone « matériel », en gardant la marque courante pour les lignes de coloris. */
+function readRows(lines, idxs) {
+  const out = [];
+  let brand = '';
+  let fresh = false; // la ligne précédente était la marque : une parenthèse à la suite la complète
+  for (const i of idxs) {
+    const l = cleanLabel(lines[i]);
+    if (l.length < 2) continue;
+    const code = brand && l.match(COLOUR_CODE);
+    if (code) {
+      const letter = code[3] ? ` (${code[3].toUpperCase()})` : '';
+      out.push({ kind: 'yarn', label: `${brand} – ${code[1]} ${code[2].trim()}${letter}`, weightCategory: detectWeight(brand) });
+      fresh = false;
+      continue;
+    }
+    const hk = l.match(HOOK_FR);
+    if (hk) {
+      out.push({ kind: 'hook', label: `Crochet ${hk[1].replace('.', ',')} mm${brand ? ` (${brand.replace(/\s*\(.*$/, '')})` : ''}`, size: num(hk[1]) });
+      fresh = false;
+      continue;
+    }
+    if (fresh && /^\(/.test(l) && brand.length < 60) {
+      brand += ' ' + l;
+      continue;
+    }
+    const m = readMaterial(lines[i]);
+    if (m) {
+      out.push(m);
+      fresh = false;
+    } else if (/^\p{Lu}/u.test(l) && l.length <= 45 && !/\d/.test(l) && !SECTION_START.test(l) && !SKIP_LINE.test(l)) {
+      brand = l;
+      fresh = true;
+    } else fresh = false;
+  }
+  return out;
+}
+
 const fmtMm = (n) => String(n).replace('.', ',');
 
 /** Applique une version au matériel : remplace les fils, ajuste crochet et yeux. */
@@ -189,7 +231,7 @@ export function parsePattern(text) {
   } else {
     for (const s of starts) for (const i of readRegion(lines, s)) if (!used.has(i)) (used.add(i), regionLines.push(i));
   }
-  let materials = regionLines.map((i) => readMaterial(lines[i])).filter(Boolean);
+  let materials = readRows(lines, regionLines);
 
   // Lignes de fil sans quantité (« Cotton fingering yarn ») : simple description, on garde l'épaisseur
   const hasQty = (y) => y.grams || y.meters || y.skeins;

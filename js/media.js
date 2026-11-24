@@ -113,6 +113,107 @@ function loadTesseract() {
   return tesseractPromise;
 }
 
+/**
+ * Captures d'écran de réseaux sociaux (mode sombre) : la page de patron est la bande claire au milieu,
+ * entourée d'une barre sombre en haut (compte, « Suivi(e) ») et en bas (likes, commentaires). On ne lit que cette bande,
+ * sinon ces textes se mélangent au patron. Sans bandes sombres nettes, l'image est lue en entier.
+ */
+async function cropToPage(blob) {
+  try {
+    const bm = await createImageBitmap(blob);
+    const W = bm.width, H = bm.height;
+    if (H / W < 1.6) return blob;
+    const sw = 120, sh = Math.round((H / W) * 120);
+    const c = document.createElement('canvas');
+    c.width = sw; c.height = sh;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(bm, 0, 0, sw, sh);
+    const d = x.getImageData(0, 0, sw, sh).data;
+    const bright = [];
+    for (let y = 0; y < sh; y++) {
+      let sum = 0;
+      for (let i = 0; i < sw; i++) {
+        const k = (y * sw + i) * 4;
+        sum += 0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2];
+      }
+      bright.push(sum / sw > 75);
+    }
+    // plus longue série de lignes claires
+    let best = [0, 0], start = -1;
+    for (let y = 0; y <= sh; y++) {
+      if (y < sh && bright[y]) { if (start < 0) start = y; }
+      else if (start >= 0) { if (y - start > best[1] - best[0]) best = [start, y]; start = -1; }
+    }
+    const frac = (best[1] - best[0]) / sh;
+    if (frac < 0.3 || frac > 0.85) { bm.close?.(); return blob; }
+    const y0 = Math.round((best[0] / sh) * H), y1 = Math.round((best[1] / sh) * H);
+    const out = document.createElement('canvas');
+    out.width = W; out.height = y1 - y0;
+    out.getContext('2d').drawImage(bm, 0, y0, W, y1 - y0, 0, 0, W, y1 - y0);
+    bm.close?.();
+    return out;
+  } catch (e) {
+    return blob;
+  }
+}
+
+/**
+ * Page en deux colonnes (ex. « Matériel » à gauche, « Abréviations » à droite) : l'OCR lirait les lignes
+ * en travers. On cherche une bande verticale vide près du milieu et on lit chaque colonne séparément.
+ */
+async function splitColumns(src) {
+  try {
+    const bm = await createImageBitmap(src);
+    const W = bm.width, H = bm.height;
+    const sw = Math.min(W, 540), sh = Math.round((H / W) * sw);
+    const c = document.createElement('canvas');
+    c.width = sw; c.height = sh;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(bm, 0, 0, sw, sh);
+    const d = x.getImageData(0, 0, sw, sh).data;
+    const lum = new Float32Array(sw * sh);
+    const all = [];
+    for (let i = 0; i < sw * sh; i++) {
+      lum[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+      if (i % 7 === 0) all.push(lum[i]);
+    }
+    all.sort((a, b) => a - b);
+    const bg = all[Math.floor(all.length / 2)];
+    const ink = new Int32Array(sw);
+    for (let yy = 0; yy < sh; yy++) for (let xx = 0; xx < sw; xx++) if (lum[yy * sw + xx] < bg - 45) ink[xx]++;
+    const total = ink.reduce((a, b) => a + b, 0);
+    if (total < 200) { bm.close?.(); return [src]; }
+    const limit = sh * 0.02;
+    let best = null, st = -1;
+    const lo = Math.floor(sw * 0.3), hi = Math.ceil(sw * 0.7);
+    for (let xx = lo; xx <= hi; xx++) {
+      const empty = xx < hi && ink[xx] <= limit;
+      if (empty) { if (st < 0) st = xx; }
+      else if (st >= 0) { if (!best || xx - st > best[1] - best[0]) best = [st, xx]; st = -1; }
+    }
+    if (!best || best[1] - best[0] < sw * 0.025) { bm.close?.(); return [src]; }
+    const cut = Math.round(((best[0] + best[1]) / 2 / sw) * W);
+    const side = (a, b) => {
+      let s = 0; for (let xx = a; xx < b; xx++) s += ink[Math.min(sw - 1, xx)];
+      return s;
+    };
+    const left = side(0, best[0]), right = side(best[1], sw);
+    // chaque colonne doit contenir une vraie part du texte
+    if (left < total * 0.2 || right < total * 0.2) { bm.close?.(); return [src]; }
+    const part = (sx, w) => {
+      const o = document.createElement('canvas');
+      o.width = w; o.height = H;
+      o.getContext('2d').drawImage(bm, sx, 0, w, H, 0, 0, w, H);
+      return o;
+    };
+    const out = [part(0, cut), part(cut, W - cut)];
+    bm.close?.();
+    return out;
+  } catch (e) {
+    return [src];
+  }
+}
+
 /** Lit le texte de photos (français + anglais), sur l'appareil, sans réseau. Renvoie le texte de toutes les photos. */
 export async function ocrImages(blobs, { onProgress } = {}) {
   const T = await loadTesseract();
@@ -128,8 +229,10 @@ export async function ocrImages(blobs, { onProgress } = {}) {
     const out = [];
     for (let i = 0; i < blobs.length; i++) {
       if (onProgress) onProgress(i + 1, blobs.length);
-      const { data } = await worker.recognize(blobs[i]);
-      out.push(data.text || '');
+      for (const part of await splitColumns(await cropToPage(blobs[i]))) {
+        const { data } = await worker.recognize(part);
+        out.push(data.text || '');
+      }
     }
     return out.join('\n');
   } finally {

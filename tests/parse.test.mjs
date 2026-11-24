@@ -101,3 +101,61 @@ test('patron à plusieurs tailles : versions, crochet, yeux, titre, pas de phras
   assert.deepEqual(small.filter((m) => m.kind === 'yarn').map((y) => y.grams), [16, 7, 10]);
   assert.equal(small.find((m) => m.kind === 'hook').size, 0.9);
 });
+
+test('patron français sur captures : marques, coloris et crochets', () => {
+  const text = `MATÉRIEL
+
+Ricorumi (pour la base)
+001 blanc
+
+052 brun clair
+
+Avec un crochet 3
+
+Scheepjes Catona
+(pour le personnage)
+105 blanc (= B)
+
+504 brique rouge (= R)
+507 chocolat (= C)
+Avec un crochet 2,5
+
+Fil à broder noir ou marron
+Anneau marqueur
+
+Ouate de rembourrage
+Ciseaux
+
+Aiguille à laine
+
+Système de fixation : bande
+scratch, boutons à pression
+ou aimants à coudre
+
+(optionnel, seulement si vous
+
+souhaitez pouvoir fixer et
+interchanger les
+
+personnages sur différentes
+
+bases)
+
+ABREVIATION SE
+
+Ch : chaînette
+
+ml: maille en lair`;
+  const r = parsePattern(text);
+  const yarns = r.materials.filter((m) => m.kind === 'yarn');
+  assert.equal(yarns.length, 5);
+  assert.ok(yarns[0].label.startsWith('Ricorumi'));
+  assert.ok(yarns[0].label.includes('001 blanc'));
+  assert.ok(yarns[2].label.startsWith('Scheepjes Catona (pour le personnage)'));
+  assert.ok(yarns[2].label.includes('(B)'));
+  assert.deepEqual(r.materials.filter((m) => m.kind === 'hook').map((h) => h.size), [3, 2.5]);
+  const acc = r.materials.filter((m) => m.kind === 'accessory').map((a) => a.label);
+  assert.equal(acc.length, 2);
+  assert.ok(acc.some((a) => /broder/i.test(a)) && acc.some((a) => /rembourrage/i.test(a)));
+  assert.ok(!r.materials.some((m) => /chaînette|maille/i.test(m.label)));
+});
