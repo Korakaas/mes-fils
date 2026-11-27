@@ -6,6 +6,7 @@ import {
   safeHttpUrl, safeServerUrl, safeBlobType, resetAppShell,
   remainingGrams, metersFromGrams, stockLevel, reservedGrams, availableGrams, needGrams, withMargin,
   slotStatus, projectStatus, candidatesForSlot, scrapsCandidates, allocateAcross, finishConsumption, projectCost, reservesYarns,
+  BULK_FIELDS, parseBulkValue, bulkChanges, toggleAll,
 } from '../js/logic.js';
 
 const phil = { id: 'phil', name: 'Phil Coton 4', skeins: 20, gramsPerSkein: 50, metersPerSkein: 85, usedGrams: 233, weightCategory: 'Worsted', material: 'Coton', inStock: true, price: 3.99 };
@@ -253,4 +254,55 @@ test('niveau de stock : une pelote entière n\'est jamais « Quasi fini »', () 
   assert.equal(stockLevel(150).key, 'petit');
   assert.equal(stockLevel(250, { gramsPerSkein: 50 }).key, 'moyen');
   assert.equal(stockLevel(600).key, 'gros');
+});
+
+test('modification en lot : champs proposés', () => {
+  assert.deepEqual(BULK_FIELDS.map((f) => f.key), ['boxId', 'weightCategory', 'material', 'brand', 'price', 'purchasedAt']);
+});
+
+test('modification en lot : valeurs saisies', () => {
+  assert.deepEqual(parseBulkValue('price', ' 3,99 '), { ok: true, value: 3.99 });
+  assert.deepEqual(parseBulkValue('price', '0'), { ok: true, value: 0 });
+  for (const bad of ['', 'abc', '3,9,9', '-2', '4 euros']) assert.equal(parseBulkValue('price', bad).ok, false, bad);
+  assert.deepEqual(parseBulkValue('brand', '  Phildar '), { ok: true, value: 'Phildar' });
+  assert.equal(parseBulkValue('brand', '   ').ok, false);
+  assert.deepEqual(parseBulkValue('purchasedAt', '2026-11-27'), { ok: true, value: '2026-11-27' });
+  assert.equal(parseBulkValue('purchasedAt', '').ok, false);
+  assert.deepEqual(parseBulkValue('weightCategory', 'DK'), { ok: true, value: 'DK' });
+  assert.equal(parseBulkValue('weightCategory', 'Énorme').ok, false);
+  assert.deepEqual(parseBulkValue('material', 'Coton'), { ok: true, value: 'Coton' });
+  assert.equal(parseBulkValue('material', '').ok, false);
+  assert.deepEqual(parseBulkValue('boxId', ''), { ok: true, value: '' });
+  assert.deepEqual(parseBulkValue('boxId', 'b1'), { ok: true, value: 'b1' });
+  assert.equal(parseBulkValue('skeins', '3').ok, false);
+});
+
+test('modification en lot : seuls les fils choisis qui changent, sans toucher au reste', () => {
+  const yarns = [
+    { id: 'a', name: 'A', skeins: 2, usedGrams: 10, openedGrams: 5 },
+    { id: 'b', name: 'B', boxId: 'b1' },
+    { id: 'c', name: 'C', boxId: 'b2' },
+    { id: 'd', name: 'D', deleted: true },
+  ];
+  const out = bulkChanges(yarns, new Set(['a', 'b', 'd', 'disparu']), 'boxId', 'b1');
+  assert.deepEqual(out, [{ id: 'a', name: 'A', skeins: 2, usedGrams: 10, openedGrams: 5, boxId: 'b1' }]);
+  assert.equal(yarns[0].boxId, undefined);
+});
+
+test('modification en lot : une valeur vide ou absente compte comme identique', () => {
+  const yarns = [{ id: 'a' }, { id: 'b', boxId: '' }, { id: 'c', boxId: 'b1' }];
+  assert.deepEqual(bulkChanges(yarns, ['a', 'b', 'c'], 'boxId', '').map((y) => y.id), ['c']);
+  const priced = [{ id: 'a', price: 0 }, { id: 'b', price: null }, { id: 'c', price: '3,5' }];
+  assert.deepEqual(bulkChanges(priced, ['a', 'b', 'c'], 'price', 0).map((y) => y.id), ['b', 'c']);
+  assert.deepEqual(bulkChanges(priced, ['c'], 'price', 3.5), []);
+});
+
+test('modification en lot : un champ hors liste ne modifie rien', () => {
+  assert.deepEqual(bulkChanges([{ id: 'a', skeins: 2 }], ['a'], 'skeins', 9), []);
+});
+
+test('tout sélectionner : ajoute les fils affichés, ou les retire s\'ils le sont tous, sans toucher aux masqués', () => {
+  assert.deepEqual([...toggleAll(new Set(['x']), ['a', 'b'])].sort(), ['a', 'b', 'x']);
+  assert.deepEqual([...toggleAll(new Set(['x', 'a', 'b']), ['a', 'b'])], ['x']);
+  assert.deepEqual([...toggleAll(new Set(['x']), [])], ['x']);
 });

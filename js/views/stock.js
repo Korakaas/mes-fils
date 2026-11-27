@@ -1,6 +1,7 @@
 import * as L from '../logic.js';
 import { ui, actions, inputs, esc, icons, photoAttrs, hydratePhotos, data, emptyState, optionsSheet, plural, go, rerender } from '../ctx.js';
 import * as sync from '../sync.js';
+import { openBulkEdit } from './bulk.js';
 
 const SORTS = [
   { value: 'recent', label: 'Ajoutés récemment' },
@@ -37,9 +38,48 @@ function cardHtml(y, d) {
   const badge = y.inStock === false ? '<span class="pill bad">Épuisé</span>' : reservedAll ? '<span class="pill info">Réservé</span>' : `<span class="pill ${level.key}">${level.label}</span>`;
   const meters = L.metersFromGrams(y, rem);
   const line = [L.skeinsText(y), L.fmtGrams(rem), meters ? `≈ ${L.fmtMeters(meters)}` : ''].filter(Boolean).join(' · ');
-  return `<a class="lot ${y.inStock === false ? 'empty' : ''}" href="#/fil/${esc(y.id)}">
-    <div class="photo" ${photoAttrs(y.photoId, y.colorKey, y.colorHex)}>${badge}</div>
-    <div class="info"><span class="name">${esc(y.name || 'Sans nom')}${y.colorName ? ` · ${esc(y.colorName)}` : ''}</span><span class="meta">${esc(line)}</span></div></a>`;
+  const cls = `lot ${y.inStock === false ? 'empty' : ''}`;
+  const inner = `<div class="photo" ${photoAttrs(y.photoId, y.colorKey, y.colorHex)}>${badge}${ui.selecting ? '<span class="tick"></span>' : ''}</div>
+    <div class="info"><span class="name">${esc(y.name || 'Sans nom')}${y.colorName ? ` · ${esc(y.colorName)}` : ''}</span><span class="meta">${esc(line)}</span></div>`;
+  if (ui.selecting) {
+    return `<button type="button" class="${cls}" aria-pressed="${ui.selected.has(y.id)}" data-act="stock.pick" data-id="${esc(y.id)}">${inner}</button>`;
+  }
+  return `<a class="${cls}" href="#/fil/${esc(y.id)}">
+    ${inner}</a>`;
+}
+
+/** Les fils cochés qui existent encore (la synchro a pu en supprimer). */
+function selectedIds(d) {
+  return [...ui.selected].filter((id) => d.yarnsById[id]);
+}
+
+function selectBarHtml(d) {
+  const ids = selectedIds(d);
+  const visible = filterYarns(d).map((y) => y.id);
+  const shown = new Set(visible);
+  const hidden = ids.filter((id) => !shown.has(id)).length;
+  const count = ids.length ? plural(ids.length, 'sélectionné', 'sélectionnés') : 'Aucun fil sélectionné';
+  const allShown = visible.length > 0 && visible.every((id) => ui.selected.has(id));
+  return `<span class="count" role="status">${count}${hidden ? `<small>dont ${plural(hidden, 'masqué', 'masqués')} par la recherche ou les filtres</small>` : ''}</span>
+    ${visible.length ? `<button type="button" class="linkbtn" data-act="stock.selectAll">${allShown ? 'Tout désélectionner' : 'Tout sélectionner'}</button>` : ''}`;
+}
+
+function editButtonHtml(d) {
+  const n = selectedIds(d).length;
+  return `<button type="button" class="btn primary block" data-act="stock.edit" ${n ? '' : 'disabled'}>Modifier${n ? ` (${n})` : ''}</button>`;
+}
+
+/** Met à jour compteur et boutons sans redessiner la grille (les photos ne clignotent pas). */
+function paintSelection() {
+  if (!ui.selecting) return;
+  const d = data();
+  const bar = document.getElementById('select-bar');
+  const foot = document.getElementById('select-foot');
+  if (bar) bar.innerHTML = selectBarHtml(d);
+  if (foot) foot.innerHTML = editButtonHtml(d);
+  document.querySelectorAll('#stock-list [data-act="stock.pick"]').forEach((el) => {
+    el.setAttribute('aria-pressed', String(ui.selected.has(el.dataset.id)));
+  });
 }
 
 export function listHtml(d) {
@@ -60,6 +100,7 @@ export function renderStock() {
   const st = sync.getState();
   return `
     <div class="topbar"><h1>Mon stock</h1>
+      ${d.yarns.length ? `<button type="button" class="linkbtn" data-act="stock.select">${ui.selecting ? 'Annuler' : 'Sélectionner'}</button>` : ''}
       <a class="iconbtn" href="#/reglages" aria-label="Réglages">${icons.gear}</a></div>
     <div class="search"><label class="sr" for="stock-search">Chercher un fil</label>${icons.search}
       <input id="stock-search" type="search" placeholder="Chercher un fil" value="${esc(ui.search)}" data-input="stock.search" autocomplete="off"></div>
@@ -72,9 +113,34 @@ export function renderStock() {
       <button type="button" class="chip" data-act="stock.sort">Trier</button>
       <button type="button" class="chip" aria-pressed="${ui.showEmpty}" data-act="stock.toggleEmpty">Épuisés</button>
     </div>
+    ${ui.selecting ? `<div class="select-bar" id="select-bar">${selectBarHtml(d)}</div>` : ''}
     <div id="stock-list">${listHtml(d)}</div>
-    <a class="fab" href="#/fil/nouveau">${icons.plus}Ajouter un fil</a>`;
+    ${
+      ui.selecting
+        ? `<div class="select-space"></div><div class="select-foot" id="select-foot">${editButtonHtml(d)}</div>`
+        : `<a class="fab" href="#/fil/nouveau">${icons.plus}Ajouter un fil</a>`
+    }`;
 }
+
+actions['stock.select'] = () => {
+  ui.selecting = !ui.selecting;
+  ui.selected = new Set();
+  rerender();
+};
+
+actions['stock.pick'] = (el) => {
+  const id = el.dataset.id;
+  if (ui.selected.has(id)) ui.selected.delete(id);
+  else ui.selected.add(id);
+  paintSelection();
+};
+
+actions['stock.selectAll'] = () => {
+  ui.selected = L.toggleAll(ui.selected, filterYarns(data()).map((y) => y.id));
+  paintSelection();
+};
+
+actions['stock.edit'] = () => openBulkEdit(selectedIds(data()));
 
 actions['stock.reset'] = () => {
   ui.filters = { weights: [], materials: [], colors: [], boxes: [] };
@@ -129,6 +195,7 @@ inputs['stock.search'] = (el) => {
   if (box) {
     box.innerHTML = listHtml(data());
     hydratePhotos(box);
+    paintSelection();
   }
 };
 

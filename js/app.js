@@ -40,6 +40,11 @@ function render() {
   const hash = location.hash || '#/';
   if (!/^#\/(patron|lire)\//.test(hash)) ui.patternBack = null;
   current = route();
+  if (current.name !== 'stock') {
+    // Quitter « Mon stock » annule la sélection en cours
+    ui.selecting = false;
+    ui.selected = new Set();
+  }
   const y = window.scrollY;
   try {
     view.innerHTML = current.html();

@@ -261,6 +261,55 @@ export function projectCost(project, yarnsById) {
   return { total, complete: known };
 }
 
+// ---------- Modification en lot ----------
+
+/** Champs qu'on peut changer sur plusieurs fils à la fois. Les quantités, le nom, la couleur et la photo restent propres à chaque fil. */
+export const BULK_FIELDS = [
+  { key: 'boxId', label: 'Boîte' },
+  { key: 'weightCategory', label: 'Épaisseur' },
+  { key: 'material', label: 'Matière' },
+  { key: 'brand', label: 'Marque' },
+  { key: 'price', label: 'Prix d’une pelote' },
+  { key: 'purchasedAt', label: 'Date d’achat' },
+];
+
+/** Valeur saisie → valeur à enregistrer. Une saisie vide est refusée (elle effacerait tout), sauf « Pas de boîte ». */
+export function parseBulkValue(field, raw) {
+  const text = String(raw ?? '').trim();
+  const ok = (value) => ({ ok: true, value });
+  const ko = (error) => ({ ok: false, error });
+  if (field === 'boxId') return ok(text);
+  if (field === 'weightCategory') return WEIGHTS.includes(text) ? ok(text) : ko('Choisis une épaisseur');
+  if (field === 'material') return MATERIALS.includes(text) ? ok(text) : ko('Choisis une matière');
+  if (field === 'brand') return text ? ok(text) : ko('Saisis une marque');
+  if (field === 'price') return /^\d+([.,]\d+)?$/.test(text) ? ok(n(text)) : ko('Saisis un prix, par exemple 3,50');
+  if (field === 'purchasedAt') return /^\d{4}-\d{2}-\d{2}$/.test(text) ? ok(text) : ko('Choisis une date');
+  return ko('Ce champ ne se modifie pas en lot');
+}
+
+/** Les fils choisis dont la valeur change, déjà mis à jour (les originaux ne sont pas modifiés). */
+export function bulkChanges(yarns, ids, field, value) {
+  if (!BULK_FIELDS.some((f) => f.key === field)) return [];
+  const chosen = new Set(ids);
+  const blank = (v) => v === undefined || v === null || v === '';
+  const same = (a, b) => {
+    if (blank(a) || blank(b)) return blank(a) && blank(b);
+    return field === 'price' ? n(a) === n(b) : a === b;
+  };
+  return yarns.filter((y) => chosen.has(y.id) && !y.deleted && !same(y[field], value)).map((y) => ({ ...y, [field]: value }));
+}
+
+/** « Tout sélectionner » : coche les fils affichés, ou les décoche s'ils le sont tous. Les fils masqués gardent leur état. */
+export function toggleAll(selected, visibleIds) {
+  const next = new Set(selected);
+  const all = visibleIds.length > 0 && visibleIds.every((id) => next.has(id));
+  for (const id of visibleIds) {
+    if (all) next.delete(id);
+    else next.add(id);
+  }
+  return next;
+}
+
 // ---------- Choisir un fil ----------
 
 export function matchesFilters(y, f = {}) {

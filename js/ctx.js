@@ -8,6 +8,8 @@ export const ui = {
   filters: { weights: [], materials: [], colors: [], boxes: [] },
   sort: 'recent',
   showEmpty: false,
+  selecting: false, // « Mon stock » : mode sélection pour la modification en lot
+  selected: new Set(),
   sheet: null,
   toast: '',
   lightbox: null,
