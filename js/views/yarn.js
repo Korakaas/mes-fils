@@ -41,7 +41,8 @@ export function renderYarn(id) {
     </div>
     <div class="card" style="margin-top:10px">
       ${row('Pelote', y.gramsPerSkein ? `${esc(numStr(y.gramsPerSkein))} g${y.metersPerSkein ? ` · ${esc(numStr(y.metersPerSkein))} m` : ''}` : '')}
-      ${row('Nombre de pelotes', y.skeins ? esc(numStr(y.skeins)) : '')}
+      ${row('Pelotes', esc(L.skeinsText(y)))}
+      ${L.toNumber(y.openedGrams) > 0 ? row('Pelote entamée', `reste ${esc(numStr(y.openedGrams))} g`) : ''}
       ${row('Prix par pelote', y.price !== null && y.price !== '' && y.price !== undefined ? esc(L.fmtEuro(L.toNumber(y.price))) : '')}
       ${row('Marque', esc(y.brand || ''))}
       ${row('Acheté le', y.purchasedAt ? esc(new Date(y.purchasedAt).toLocaleDateString('fr-FR')) : '')}
@@ -85,7 +86,7 @@ actions['yarn.weigh'] = (el) => {
   const y = store.get('yarns', el.dataset.id);
   promptSheet({
     title: 'Peser le reste',
-    label: 'Poids sur la balance, en grammes',
+    label: 'Poids total de ce fil sur la balance, en grammes',
     type: 'number',
     value: y.weighedGrams !== null && y.weighedGrams !== undefined && y.weighedGrams !== '' ? numStr(y.weighedGrams) : '',
     hint: 'Ce poids remplace le calcul. Laisse vide pour revenir au calcul automatique.',
@@ -163,7 +164,9 @@ export function renderYarnForm(id) {
         <div class="field"><label for="f-grams">Poids (g)</label><input id="f-grams" name="gramsPerSkein" type="text" inputmode="decimal" value="${esc(numStr(y.gramsPerSkein))}" placeholder="ex. 50"></div>
         <div class="field"><label for="f-meters">Mètres</label><input id="f-meters" name="metersPerSkein" type="text" inputmode="decimal" value="${esc(numStr(y.metersPerSkein))}" placeholder="ex. 85"></div>
       </div>
-      <p class="hint" style="margin:-6px 0 14px">Poids et mètres sont ceux d’une pelote, lus sur l’étiquette.</p>
+      <p class="hint" style="margin:-6px 0 14px">Poids et mètres sont ceux d’une pelote, lus sur l’étiquette. « Pelotes » compte les pelotes entières.</p>
+      <div class="field"><label for="f-opened">Une pelote entamée : poids restant (g)</label><input id="f-opened" name="openedGrams" type="text" inputmode="decimal" value="${esc(numStr(y.openedGrams))}" placeholder="vide si toutes sont neuves">
+      <p class="hint" style="margin-top:6px">Pèse-la sur ta balance : ce poids s’ajoute aux pelotes entières. Pour plusieurs pelotes entamées, fais une fiche par pelote ou pèse le total depuis la fiche (« Peser le reste »).</p></div>
       <details class="more"${editing ? ' open' : ''}><summary>Plus de détails</summary><div class="inner">
         <div class="field"><label for="f-color">Nom du coloris</label><input id="f-color" name="colorName" type="text" value="${esc(y.colorName || '')}" placeholder="ex. Taupe"></div>
         <div class="field"><label for="f-brand">Marque</label><input id="f-brand" name="brand" type="text" value="${esc(y.brand || '')}"></div>
@@ -264,6 +267,7 @@ submits['yarn.save'] = async (form) => {
     skeins: toNum(v.skeins) ?? 1,
     gramsPerSkein: toNum(v.gramsPerSkein),
     metersPerSkein: toNum(v.metersPerSkein),
+    openedGrams: toNum(v.openedGrams),
     price: toNum(v.price),
     purchasedAt: v.purchasedAt || '',
     boxId: v.boxId || '',

@@ -36,7 +36,7 @@ function cardHtml(y, d) {
   const level = L.stockLevel(rem);
   const badge = y.inStock === false ? '<span class="pill bad">Épuisé</span>' : reservedAll ? '<span class="pill info">Réservé</span>' : `<span class="pill ${level.key}">${level.label}</span>`;
   const meters = L.metersFromGrams(y, rem);
-  const line = [y.skeins ? plural(Number(y.skeins), 'pelote', 'pelotes') : '', L.fmtGrams(rem), meters ? `≈ ${L.fmtMeters(meters)}` : ''].filter(Boolean).join(' · ');
+  const line = [L.skeinsText(y), L.fmtGrams(rem), meters ? `≈ ${L.fmtMeters(meters)}` : ''].filter(Boolean).join(' · ');
   return `<a class="lot ${y.inStock === false ? 'empty' : ''}" href="#/fil/${esc(y.id)}">
     <div class="photo" ${photoAttrs(y.photoId, y.colorKey, y.colorHex)}>${badge}</div>
     <div class="info"><span class="name">${esc(y.name || 'Sans nom')}${y.colorName ? ` · ${esc(y.colorName)}` : ''}</span><span class="meta">${esc(line)}</span></div></a>`;

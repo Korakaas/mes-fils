@@ -136,7 +136,7 @@ export function yarnTitle(y) {
 export function yarnLine(y) {
   const rem = L.remainingGrams(y);
   const parts = [];
-  if (y.skeins) parts.push(`${numStr(y.skeins)} pelote${y.skeins > 1 ? 's' : ''}`);
+  if (L.skeinsText(y)) parts.push(L.skeinsText(y));
   parts.push(L.fmtGrams(rem));
   return parts.join(' · ');
 }

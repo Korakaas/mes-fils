@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  skeinsText,
   safeHttpUrl, safeServerUrl, safeBlobType, resetAppShell,
   remainingGrams, metersFromGrams, stockLevel, reservedGrams, availableGrams, needGrams, withMargin,
   slotStatus, projectStatus, candidatesForSlot, scrapsCandidates, allocateAcross, finishConsumption, projectCost, reservesYarns,
@@ -205,4 +206,15 @@ test('mise à jour : ne retire que le service et les caches de mes-fils (adresse
 
 test('mise à jour : fonctionne sans service ni cache (navigateur qui les bloque)', async () => {
   await resetAppShell({ scope: 'https://exemple.github.io/mes-fils/' });
+});
+
+test('pelote entamée : s\'ajoute aux pelotes entières', () => {
+  const y = { skeins: 1, gramsPerSkein: 50, metersPerSkein: 121, openedGrams: 18, usedGrams: 0 };
+  assert.equal(remainingGrams(y), 68);
+  assert.equal(remainingGrams({ ...y, usedGrams: 20 }), 48);
+  assert.equal(skeinsText(y), '1 pelote + 1 entamée');
+  assert.equal(skeinsText({ ...y, skeins: 3 }), '3 pelotes + 1 entamée');
+  assert.equal(skeinsText({ ...y, skeins: 0 }), '1 entamée');
+  assert.equal(skeinsText({ skeins: 2, gramsPerSkein: 50 }), '2 pelotes');
+  assert.equal(remainingGrams({ ...y, weighedGrams: 60 }), 60);
 });

@@ -49,7 +49,17 @@ export const toNumber = n;
 // ---------- Fils ----------
 
 export function totalGrams(y) {
-  return n(y.skeins) * n(y.gramsPerSkein);
+  return n(y.skeins) * n(y.gramsPerSkein) + n(y.openedGrams);
+}
+
+/** « 2 pelotes », « 1 pelote + 1 entamée », « 1 entamée » : pelotes entières plus, s'il y en a une, la pelote entamée. */
+export function skeinsText(y) {
+  const whole = n(y.skeins);
+  const opened = n(y.openedGrams) > 0;
+  const parts = [];
+  if (whole > 0) parts.push(`${String(Math.round(whole * 100) / 100).replace('.', ',')} pelote${whole > 1 ? 's' : ''}`);
+  if (opened) parts.push('1 entamée');
+  return parts.join(' + ');
 }
 
 /** Restant en grammes : le poids pesé remplace le calcul. */
