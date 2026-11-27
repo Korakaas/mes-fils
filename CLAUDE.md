@@ -3,7 +3,7 @@
 Appli personnelle de Kora pour suivre ses fils, ses patrons et ses projets de crochet (elle remplace un suivi Notion). Interface **en français**, look pastel, pensée pour le téléphone (Samsung S25, installée en PWA). Répondre à Kora en français, simplement : le résultat d'abord, le détail ensuite.
 
 ## Pile technique
-- PWA en JavaScript pur (modules ES), sans framework ni étape de build. Les pages sont servies telles quelles par GitHub Pages (`.github/workflows/pages.yml`) : https://korakaas.github.io/mes-fils/
+- PWA en JavaScript pur (modules ES), sans framework ni étape de build. Les pages sont servies telles quelles par GitHub Pages, publiées automatiquement depuis la branche `main` (fichier `.nojekyll`, pas de workflow) : https://korakaas.github.io/mes-fils/
 - Données locales dans IndexedDB (`js/store.js` : collections de documents, blobs pour les photos et PDF, métadonnées).
 - Synchro facultative avec le projet Supabase de Kora (`js/sync.js`, `supabase/setup.sql`). Pas de serveur à nous.
 - Service worker `sw.js` : réseau d'abord, cache de secours. **La constante `VERSION` doit être incrémentée à chaque livraison.** Le numéro affiché en bas des Réglages (`js/views/settings.js`) est écrit à part : mettre les deux à jour (un test le vérifie).

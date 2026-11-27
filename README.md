@@ -61,8 +61,8 @@ en cas de modification des deux côtés, la plus récente gagne.
 
 ## Mettre à jour l'appli
 
-Après chaque modification des fichiers, **change `VERSION` dans `sw.js`** (par exemple `v2`) : sinon
-le téléphone garde l'ancienne version en cache. Au prochain lancement, l'appli se met à jour.
+Après chaque modification des fichiers, **change `VERSION` dans `sw.js`** (par exemple `v2`) et le numéro affiché
+dans `js/views/settings.js` : `npm test` vérifie qu'ils sont identiques. Au prochain lancement, l'appli se met à jour.
 
 ## Développement
 
