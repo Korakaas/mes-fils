@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  safeHttpUrl, safeServerUrl, safeBlobType,
+  safeHttpUrl, safeServerUrl, safeBlobType, resetAppShell,
   remainingGrams, metersFromGrams, stockLevel, reservedGrams, availableGrams, needGrams, withMargin,
   slotStatus, projectStatus, candidatesForSlot, scrapsCandidates, allocateAcross, finishConsumption, projectCost, reservesYarns,
 } from '../js/logic.js';
@@ -186,4 +186,23 @@ test('fichiers reçus : seuls PDF et images gardent leur type', () => {
   assert.equal(safeBlobType('text/html'), 'application/octet-stream');
   assert.equal(safeBlobType('image/svg+xml'), 'application/octet-stream');
   assert.equal(safeBlobType(''), 'application/octet-stream');
+});
+
+test('mise à jour : ne retire que le service et les caches de mes-fils (adresse partagée avec d’autres applis)', async () => {
+  const retires = [];
+  const scope = 'https://exemple.github.io/mes-fils/';
+  const reg = (s) => ({ scope: s, unregister: async () => retires.push(s) });
+  const regs = [reg('https://exemple.github.io/nikki-app/'), reg(scope), reg('https://exemple.github.io/')];
+  const supprimes = [];
+  const cacheStorage = {
+    keys: async () => ['mes-fils-v15', 'programme-12s-v4', 'mes-fils-v16', 'workbox-precache-v2-https://exemple.github.io/nikki-app/'],
+    delete: async (k) => supprimes.push(k),
+  };
+  await resetAppShell({ serviceWorker: { getRegistrations: async () => regs }, cacheStorage, scope });
+  assert.deepEqual(retires, [scope]);
+  assert.deepEqual(supprimes, ['mes-fils-v15', 'mes-fils-v16']);
+});
+
+test('mise à jour : fonctionne sans service ni cache (navigateur qui les bloque)', async () => {
+  await resetAppShell({ scope: 'https://exemple.github.io/mes-fils/' });
 });

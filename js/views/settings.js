@@ -1,5 +1,6 @@
 import * as store from '../store.js';
 import * as sync from '../sync.js';
+import * as L from '../logic.js';
 import { loadDemo } from '../demo.js';
 import { actions, submits, esc, icons, topbar, data, go, toast, confirmSheet, promptSheet, rerender, numStr, toNum, pickFile } from '../ctx.js';
 
@@ -59,7 +60,7 @@ export function renderSettings() {
     ${store.isMemoryOnly() ? `<div class="banner warn" style="margin-top:14px">${icons.alert}<span>Le stockage de ce navigateur est bloqué : les données seront perdues à la fermeture.</span></div>` : ''}
     <button type="button" class="btn block" style="margin-top:18px" data-act="settings.refresh">Mettre à jour l’appli</button>
     <p class="hint" style="margin:8px 0 0;text-align:center">Recharge les derniers fichiers. Tes fils et projets ne sont pas touchés.</p>
-    <p class="hint" style="margin:14px 0 0;text-align:center">Mes fils · version 16</p>`;
+    <p class="hint" style="margin:14px 0 0;text-align:center">Mes fils · version 17</p>`;
 }
 
 submits['settings.save'] = async (form) => {
@@ -185,14 +186,7 @@ actions['settings.import'] = async () => {
 
 actions['settings.refresh'] = async () => {
   try {
-    if ('serviceWorker' in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map((r) => r.unregister()));
-    }
-    if (window.caches) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map((k) => caches.delete(k)));
-    }
+    await L.resetAppShell({ serviceWorker: navigator.serviceWorker, cacheStorage: window.caches, scope: new URL('./', location.href).href });
   } catch (e) {
     /* on recharge quand même */
   }

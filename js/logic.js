@@ -362,6 +362,18 @@ export function safeBlobType(t) {
   return /^(application\/pdf|image\/(jpeg|png|webp|gif|avif|heic|heif))$/.test(s) ? s : 'application/octet-stream';
 }
 
+/** « Mettre à jour l'appli » : ne retire que le service et les caches de mes-fils. D'autres applis partagent la même adresse. */
+export async function resetAppShell({ serviceWorker, cacheStorage, scope }) {
+  if (serviceWorker) {
+    const regs = await serviceWorker.getRegistrations();
+    await Promise.all(regs.filter((r) => r.scope === scope).map((r) => r.unregister()));
+  }
+  if (cacheStorage) {
+    const keys = await cacheStorage.keys();
+    await Promise.all(keys.filter((k) => k.startsWith('mes-fils-')).map((k) => cacheStorage.delete(k)));
+  }
+}
+
 export function uid() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
   return 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
