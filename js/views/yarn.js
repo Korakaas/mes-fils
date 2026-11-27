@@ -46,7 +46,7 @@ export function renderYarn(id) {
       ${row('Marque', esc(y.brand || ''))}
       ${row('Acheté le', y.purchasedAt ? esc(new Date(y.purchasedAt).toLocaleDateString('fr-FR')) : '')}
       ${row('Boîte', box ? esc(box.name) : '<span style="color:var(--muted)">Pas de boîte</span>')}
-      ${y.url ? row('Lien', `<a href="${esc(y.url)}" target="_blank" rel="noopener">Ouvrir</a>`) : ''}
+      ${L.safeHttpUrl(y.url) ? row('Lien', `<a href="${esc(L.safeHttpUrl(y.url))}" target="_blank" rel="noopener noreferrer">Ouvrir</a>`) : ''}
       ${y.notes ? row('Notes', esc(y.notes)) : ''}
     </div>
     ${

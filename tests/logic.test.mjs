@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  safeHttpUrl, safeServerUrl, safeBlobType,
   remainingGrams, metersFromGrams, stockLevel, reservedGrams, availableGrams, needGrams, withMargin,
   slotStatus, projectStatus, candidatesForSlot, scrapsCandidates, allocateAcross, finishConsumption, projectCost, reservesYarns,
 } from '../js/logic.js';
@@ -159,4 +160,30 @@ test('dates : durée, formats, grille du mois et événements', async () => {
   assert.deepEqual(ev.map((e) => e.type + e.date), ['start2026-10-01', 'end2026-10-20', 'deadline2026-10-25', 'start2026-11-02', 'deadline2026-12-20']);
   assert.equal(ev.find((e) => e.projectId === 'b' && e.type === 'deadline').done, true);
   assert.deepEqual(L.projectSpan({ startedAt: '2026-11-02', status: 'en_cours' }, '2026-11-05'), ['2026-11-02', '2026-11-05']);
+});
+
+test('liens : seulement http(s), jamais javascript:', () => {
+  assert.equal(safeHttpUrl('javascript:alert(1)'), '');
+  assert.equal(safeHttpUrl('  JaVaScRiPt:alert(1)'), '');
+  assert.equal(safeHttpUrl('data:text/html,<script>1</script>'), '');
+  assert.equal(safeHttpUrl('vbscript:x'), '');
+  assert.equal(safeHttpUrl('pas un lien'), '');
+  assert.equal(safeHttpUrl('https://example.com/fil?a=1'), 'https://example.com/fil?a=1');
+});
+
+test('adresse du serveur : https obligatoire (http seulement en local)', () => {
+  assert.equal(safeServerUrl('https://abc.supabase.co/'), 'https://abc.supabase.co');
+  assert.equal(safeServerUrl('http://abc.supabase.co'), '');
+  assert.equal(safeServerUrl('http://localhost:54321'), 'http://localhost:54321');
+  assert.equal(safeServerUrl('javascript:alert(1)'), '');
+  assert.equal(safeServerUrl(''), '');
+});
+
+test('fichiers reçus : seuls PDF et images gardent leur type', () => {
+  assert.equal(safeBlobType('application/pdf'), 'application/pdf');
+  assert.equal(safeBlobType('image/jpeg'), 'image/jpeg');
+  assert.equal(safeBlobType('IMAGE/PNG; charset=x'), 'image/png');
+  assert.equal(safeBlobType('text/html'), 'application/octet-stream');
+  assert.equal(safeBlobType('image/svg+xml'), 'application/octet-stream');
+  assert.equal(safeBlobType(''), 'application/octet-stream');
 });

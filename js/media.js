@@ -36,7 +36,7 @@ export async function shrinkImage(file, max = 1400, quality = 0.82) {
 export async function extractPdfText(blob) {
   const pdfjs = await loadPdfjs();
   const data = new Uint8Array(await blob.arrayBuffer());
-  const doc = await pdfjs.getDocument({ data }).promise;
+  const doc = await pdfjs.getDocument({ data, isEvalSupported: false, enableScripting: false }).promise;
   const pages = [];
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
@@ -71,7 +71,7 @@ export async function extractPdfText(blob) {
 export async function renderPdf(blob, container, { onProgress, perPage = false, width: forcedWidth = 0 } = {}) {
   const pdfjs = await loadPdfjs();
   const data = new Uint8Array(await blob.arrayBuffer());
-  const doc = await pdfjs.getDocument({ data }).promise;
+  const doc = await pdfjs.getDocument({ data, isEvalSupported: false, enableScripting: false }).promise;
   const width = Math.max(280, forcedWidth || container.clientWidth || 360);
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   container.innerHTML = '';

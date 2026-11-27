@@ -782,7 +782,7 @@ export function renderReader(id, projectId) {
   const back = projectId ? `#/projet/${projectId}` : id === 'brouillon' ? '#/patron/brouillon' : `#/patron/${id}`;
   const files = patternFiles(p);
   const mode = readerPref.get();
-  const open = p.link ? `<a class="btn small" href="${esc(p.link)}" target="_blank" rel="noopener">Ouvrir le lien</a>` : '';
+  const open = L.safeHttpUrl(p.link) ? `<a class="btn small" href="${esc(L.safeHttpUrl(p.link))}" target="_blank" rel="noopener noreferrer">Ouvrir le lien</a>` : '';
   const body = files.length
     ? files
         .map(

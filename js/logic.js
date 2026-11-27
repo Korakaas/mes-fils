@@ -334,6 +334,34 @@ export function fmtEuro(v) {
   return `${(Math.round(v * 100) / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 }
 
+/** Un lien saisi (ou reçu de la synchro) n'est ouvrable que s'il commence par http:// ou https:// (jamais javascript:). */
+export function safeHttpUrl(u) {
+  const s = String(u || '').trim();
+  try {
+    const x = new URL(s);
+    return x.protocol === 'https:' || x.protocol === 'http:' ? x.href : '';
+  } catch {
+    return '';
+  }
+}
+
+/** Adresse d'un projet Supabase : https obligatoire (http seulement en local). Renvoie l'origine, ou '' si invalide. */
+export function safeServerUrl(u) {
+  try {
+    const x = new URL(String(u || '').trim());
+    const local = x.hostname === 'localhost' || x.hostname === '127.0.0.1';
+    return x.protocol === 'https:' || (x.protocol === 'http:' && local) ? x.origin : '';
+  } catch {
+    return '';
+  }
+}
+
+/** Seuls les PDF et les images courantes gardent leur type ; tout le reste devient un simple fichier à télécharger. */
+export function safeBlobType(t) {
+  const s = String(t || '').toLowerCase().split(';')[0].trim();
+  return /^(application\/pdf|image\/(jpeg|png|webp|gif|avif|heic|heif))$/.test(s) ? s : 'application/octet-stream';
+}
+
 export function uid() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
   return 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);

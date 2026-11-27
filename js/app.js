@@ -152,9 +152,21 @@ async function boot() {
   if (connect) {
     history.replaceState(null, '', location.pathname + location.search + '#/');
     render();
+    let host = '';
+    let origin = '';
+    try {
+      const u = new URL(connect.url);
+      host = u.host;
+      origin = u.origin;
+    } catch {
+      /* adresse invalide : refusée plus bas */
+    }
+    const known = sync.getState().config;
     confirmSheet({
       title: 'Relier cet appareil ?',
-      text: 'Tes fils, patrons et projets de l’autre appareil vont apparaître ici.',
+      text: `Serveur : ${host || 'adresse invalide'}. Ne continue que si ce lien vient de ton autre appareil : tout ce que tu enregistreras ici sera envoyé à ce serveur.${
+        known && known.url !== origin ? ' Attention : cet appareil est déjà relié à un autre serveur, il sera remplacé.' : ''
+      }`,
       confirmLabel: 'Relier',
       onConfirm: async () => {
         try {

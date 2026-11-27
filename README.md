@@ -53,7 +53,8 @@ en cas de modification des deux côtés, la plus récente gagne.
 ## À savoir
 
 - Le plan gratuit de Supabase **met en pause un projet inactif** (environ une semaine sans activité) : il se réveille depuis le tableau de bord Supabase. Les données locales restent intactes.
-- Les fichiers (photos, PDF) sont dans un bucket public mais sous des adresses aléatoires impossibles à deviner ; le code secret n'apparaît jamais dans l'adresse.
+- Les fichiers (photos, PDF) sont dans un bucket public mais sous des adresses aléatoires impossibles à deviner ; le code secret n'apparaît jamais dans l'adresse. Le dossier ne peut ni être listé ni voir ses fichiers remplacés (relance `supabase/setup.sql` après une mise à jour de l'appli pour appliquer ces règles).
+- **Sécurité** : le « lien de connexion » d'un appareil et le code secret donnent un accès complet à tes données : ne les partage pas, et n'ouvre un lien de connexion que s'il vient de toi (l'appli affiche le serveur visé avant de relier). L'appli bloque les scripts extérieurs (politique de sécurité du contenu dans `index.html`) ; si tu utilises un domaine Supabase personnalisé, ajoute-le à la ligne `connect-src`.
 - La **sauvegarde JSON ne contient pas les photos ni les PDF** (seulement les données). Ils sont conservés par la synchro.
 - La lecture des **PDF** ne marche que sur ceux qui contiennent du texte. Les **photos** sont lues par une reconnaissance de texte intégrée (français et anglais, sur l'appareil, sans réseau, environ 12 Mo de fichiers) : elle est fiable sur des captures d'écran ou des pages nettes, moins sur des photos penchées ou manuscrites. Vérifie toujours les chiffres avant d'enregistrer.
 - Ressaisie à la main depuis Notion (pas d'import prévu).

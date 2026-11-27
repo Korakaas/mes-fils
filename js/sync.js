@@ -1,6 +1,7 @@
 // Synchronisation avec Supabase par code secret. Sans configuration, l'appli reste 100 % locale.
 
 import * as store from './store.js';
+import { safeServerUrl, safeBlobType } from './logic.js';
 
 const state = { status: 'off', lastSync: null, error: '', config: null };
 const listeners = new Set();
@@ -33,12 +34,12 @@ export async function loadConfig() {
 
 export async function saveConfig(cfg) {
   const clean = {
-    url: String(cfg.url || '').trim().replace(/\/+$/, ''),
+    url: safeServerUrl(cfg.url),
     key: String(cfg.key || '').trim(),
     code: String(cfg.code || '').trim(),
   };
   if (!clean.url || !clean.key || clean.code.length < 16) {
-    throw new Error('Renseigne l’adresse, la clé et un code d’au moins 16 caractères.');
+    throw new Error('Renseigne l’adresse (en https://), la clé et un code d’au moins 16 caractères.');
   }
   await store.setMeta('sync', clean);
   await store.setMeta('lastPull', '1970-01-01T00:00:00Z');
@@ -112,7 +113,9 @@ function publicUrl(id) {
 async function fetchRemoteBlob(id) {
   const res = await fetch(publicUrl(id));
   if (!res.ok) throw new Error('fichier introuvable');
-  return res.blob();
+  const blob = await res.blob();
+  // Le type vient du serveur : on ne garde que PDF et images, pour qu'un fichier ne puisse jamais s'ouvrir comme une page web
+  return new Blob([blob], { type: safeBlobType(blob.type) });
 }
 
 async function pushBlobs() {
@@ -120,10 +123,16 @@ async function pushBlobs() {
   for (const rec of await store.pendingBlobs()) {
     const res = await fetch(`${c.url}/storage/v1/object/crochet-files/${encodeURIComponent(rec.id)}`, {
       method: 'POST',
-      headers: headers({ 'Content-Type': rec.type || 'application/octet-stream', 'x-upsert': 'true' }),
+      headers: headers({ 'Content-Type': safeBlobType(rec.type) }),
       body: rec.blob,
     });
-    if (!res.ok && res.status !== 409) {
+    // Un fichier n'est jamais modifié après envoi (identifiant unique) : « déjà présent » veut dire « déjà envoyé »
+    let duplicate = res.status === 409;
+    if (!res.ok && !duplicate) {
+      const body = await res.json().catch(() => ({}));
+      duplicate = String(body.statusCode) === '409';
+    }
+    if (!res.ok && !duplicate) {
       throw new Error(`envoi du fichier refusé (${res.status})`);
     }
     await store.saveBlobRecord({ ...rec, uploaded: true });
@@ -193,7 +202,8 @@ export function scheduleSync(delay = 1500) {
 }
 
 export async function testConnection(cfg) {
-  const url = String(cfg.url || '').trim().replace(/\/+$/, '');
+  const url = safeServerUrl(cfg.url);
+  if (!url) throw new Error('L’adresse du projet doit commencer par https://.');
   const res = await fetch(`${url}/rest/v1/rpc/crochet_pull`, {
     method: 'POST',
     headers: { apikey: cfg.key, Authorization: `Bearer ${cfg.key}`, 'Content-Type': 'application/json' },
