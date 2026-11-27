@@ -4,6 +4,31 @@ export const DEFAULTS = { margin: 0.1, restThreshold: 20 };
 
 export const WEIGHTS = ['Dentelle', 'Fingering', 'Sport', 'DK', 'Worsted', 'Aran', 'Bulky', 'Super bulky'];
 
+/** Guide des épaisseurs : [catégorie de l'appli, classement américain CYC, plis (UK), crochet en mm, mètres pour 100 g (ordre de grandeur)]. */
+export const WEIGHT_GUIDE = [
+  ['Dentelle', '0 Lace', '1-2 plis', '1,5 – 2,25', '400 et +'],
+  ['Fingering', '1 Super fine', '3-4 plis', '2,25 – 3,5', '350 – 450'],
+  ['Sport', '2 Fine', '5 plis', '3,5 – 4,5', '280 – 350'],
+  ['DK', '3 Light', '8 plis', '4,5 – 5,5', '200 – 250'],
+  ['Worsted', '4 Medium', '10 plis', '5,5 – 6,5', '170 – 200'],
+  ['Aran', '4 Medium (épais)', '10-12 plis', '5,5 – 6,5', '150 – 180'],
+  ['Bulky', '5 Bulky', '12 plis', '6,5 – 9', '100 – 130'],
+  ['Super bulky', '6 Super bulky', '14 plis et +', '9 – 15', '< 100'],
+];
+
+// Fils dont l'épaisseur est connue (proposée seulement quand le champ est vide)
+const KNOWN_WEIGHTS = [
+  [/phil(?:dar)?\s*coton\s*3\b|coton\s*3\b.*phildar/i, 'Sport'],
+  [/\bcatona\b/i, 'Fingering'],
+  [/\bricorumi\b/i, 'DK'],
+];
+
+export function guessWeightCategory(name) {
+  const s = String(name || '');
+  const hit = KNOWN_WEIGHTS.find(([re]) => re.test(s));
+  return hit ? hit[1] : '';
+}
+
 export const MATERIALS = ['Coton', 'Acrylique', 'Laine', 'Mohair', 'Mélange', 'Bambou', 'Lin', 'Soie', 'Polyester', 'Autre'];
 
 export const COLORS = [

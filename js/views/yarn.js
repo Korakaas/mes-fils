@@ -3,7 +3,7 @@ import * as store from '../store.js';
 import * as L from '../logic.js';
 import { shrinkImage } from '../media.js';
 import {
-  ui, actions, submits, esc, icons, topbar, photoAttrs, data, go, toast, confirmSheet, promptSheet, pickFile, readForm, toNum, numStr, yarnTitle, hydratePhotos, rerender,
+  ui, actions, inputs, submits, openSheet, esc, icons, topbar, photoAttrs, data, go, toast, confirmSheet, promptSheet, pickFile, readForm, toNum, numStr, yarnTitle, hydratePhotos, rerender,
 } from '../ctx.js';
 
 // ---------- Fiche d'un fil ----------
@@ -161,9 +161,9 @@ export function renderYarnForm(id) {
         <div style="flex:none;width:96px">
           <button type="button" class="btn block" id="yarn-photo-btn" data-act="yarnform.photo" style="height:96px;border-radius:20px;flex-direction:column;gap:2px;padding:0;background-size:cover;background-position:center" ${y.photoId ? `data-photo="${esc(y.photoId)}"` : ''}>${icons.camera}<span style="font-size:12px">Photo</span></button>
         </div>
-        <div class="field" style="margin:0"><label for="f-name">Nom du fil</label><input id="f-name" name="name" type="text" value="${esc(y.name || '')}" required autocomplete="off" placeholder="ex. Phil Coton 4"></div>
+        <div class="field" style="margin:0"><label for="f-name">Nom du fil</label><input id="f-name" name="name" type="text" value="${esc(y.name || '')}" required autocomplete="off" placeholder="ex. Phil Coton 4" data-input="yarnform.name"></div>
       </div>
-      <div class="field"><span class="legend">Épaisseur</span>${chipGroup('weightCategory', L.WEIGHTS, y.weightCategory)}</div>
+      <div class="field"><span class="legend">Épaisseur <button type="button" class="linkbtn" style="margin-left:8px" data-act="yarnform.guide">Guide des épaisseurs</button></span>${chipGroup('weightCategory', L.WEIGHTS, y.weightCategory)}</div>
       <div class="field"><span class="legend">Matière</span>${chipGroup('material', L.MATERIALS, y.material)}</div>
       <div class="field"><span class="legend">Couleur</span>${colors}</div>
       <div class="row">
@@ -197,6 +197,27 @@ export function renderYarnForm(id) {
 export function afterYarnForm() {
   hydratePhotos(document.getElementById('view'));
 }
+
+// Épaisseur proposée d'après le nom, seulement si rien n'est encore choisi
+inputs['yarnform.name'] = (el) => {
+  const form = document.getElementById('yarn-form');
+  if (!form || form.elements.weightCategory.value) return;
+  const w = L.guessWeightCategory(el.value);
+  const chip = w && form.querySelector(`.chip[data-field="weightCategory"][data-value="${w}"]`);
+  if (chip) chip.click();
+};
+
+actions['yarnform.guide'] = () => {
+  const rows = L.WEIGHT_GUIDE.map((r) => `<tr>${r.map((c, i) => (i === 0 ? `<th scope="row">${esc(c)}</th>` : `<td>${esc(c)}</td>`)).join('')}</tr>`).join('');
+  openSheet({
+    type: 'html',
+    title: 'Guide des épaisseurs',
+    html: `<h2>Guide des épaisseurs</h2>
+      <table class="guide"><thead><tr><th>Appli</th><th>CYC (US)</th><th>UK</th><th>Crochet (mm)</th><th>m / 100 g</th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="hint">Valeurs approximatives : chaque marque a ses écarts. Le coton donne moins de mètres que la laine à épaisseur égale. Les fabricants français indiquent souvent un numéro d’aiguille (en mm) : c’est le meilleur repère.</p>
+      <div class="actions"><button type="button" class="btn primary" data-act="sheet.close">Fermer</button></div>`,
+  });
+};
 
 actions['yarnform.chip'] = (el) => {
   const form = document.getElementById('yarn-form');

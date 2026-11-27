@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  guessWeightCategory, WEIGHT_GUIDE, WEIGHTS,
   skeinsText,
   safeHttpUrl, safeServerUrl, safeBlobType, resetAppShell,
   remainingGrams, metersFromGrams, stockLevel, reservedGrams, availableGrams, needGrams, withMargin,
@@ -217,4 +218,14 @@ test('pelote entamée : s\'ajoute aux pelotes entières', () => {
   assert.equal(skeinsText({ ...y, skeins: 0 }), '1 entamée');
   assert.equal(skeinsText({ skeins: 2, gramsPerSkein: 50 }), '2 pelotes');
   assert.equal(remainingGrams({ ...y, weighedGrams: 60 }), 60);
+});
+
+test('épaisseur devinée d\'après le nom du fil', () => {
+  assert.equal(guessWeightCategory('Phil Coton 3'), 'Sport');
+  assert.equal(guessWeightCategory('Phildar Coton 3'), 'Sport');
+  assert.equal(guessWeightCategory('Scheepjes Catona'), 'Fingering');
+  assert.equal(guessWeightCategory('Ricorumi DK'), 'DK');
+  assert.equal(guessWeightCategory('Phil Coton 4'), '');
+  assert.equal(guessWeightCategory(''), '');
+  assert.deepEqual(WEIGHT_GUIDE.map((r) => r[0]), WEIGHTS);
 });
