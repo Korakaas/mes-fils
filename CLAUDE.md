@@ -6,7 +6,7 @@ Appli personnelle de Kora pour suivre ses fils, ses patrons et ses projets de cr
 - PWA en JavaScript pur (modules ES), sans framework ni étape de build. Les pages sont servies telles quelles par GitHub Pages (`.github/workflows/pages.yml`) : https://korakaas.github.io/mes-fils/
 - Données locales dans IndexedDB (`js/store.js` : collections de documents, blobs pour les photos et PDF, métadonnées).
 - Synchro facultative avec le projet Supabase de Kora (`js/sync.js`, `supabase/setup.sql`). Pas de serveur à nous.
-- Service worker `sw.js` : réseau d'abord, cache de secours. **La constante `VERSION` doit être incrémentée à chaque livraison.** Elle s'affiche en bas des Réglages.
+- Service worker `sw.js` : réseau d'abord, cache de secours. **La constante `VERSION` doit être incrémentée à chaque livraison.** Le numéro affiché en bas des Réglages (`js/views/settings.js`) est écrit à part : mettre les deux à jour (un test le vérifie).
 - pdf.js et tesseract.js sont fournis dans `vendor/` (pas de CDN, voir la CSP dans `index.html`).
 
 ## Organisation du code

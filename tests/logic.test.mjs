@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   knownYarn, guessWeightCategory, WEIGHT_GUIDE, WEIGHTS,
   skeinsText,
@@ -305,4 +306,12 @@ test('tout sélectionner : ajoute les fils affichés, ou les retire s\'ils le so
   assert.deepEqual([...toggleAll(new Set(['x']), ['a', 'b'])].sort(), ['a', 'b', 'x']);
   assert.deepEqual([...toggleAll(new Set(['x', 'a', 'b']), ['a', 'b'])], ['x']);
   assert.deepEqual([...toggleAll(new Set(['x']), [])], ['x']);
+});
+
+test('la version affichée dans les Réglages est celle de sw.js', () => {
+  const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const sw = /const VERSION = 'v(\d+)'/.exec(read('sw.js'))?.[1];
+  const shown = /Mes fils · version (\d+)/.exec(read('js/views/settings.js'))?.[1];
+  assert.ok(sw, 'VERSION introuvable dans sw.js');
+  assert.equal(shown, sw);
 });
