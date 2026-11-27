@@ -137,6 +137,13 @@ export function renderYarnForm(id) {
   if (id && !editing) return `${topbar('Fil introuvable', { backHref: '#/' })}`;
   draft = { photoFile: null, photoUrl: null };
   const y = editing || { skeins: 1, weightCategory: '', material: '', colorKey: '' };
+  // Poids total pesé ; une pelote entamée saisie avec la version précédente est convertie en poids total
+  const weighedValue =
+    y.weighedGrams !== null && y.weighedGrams !== undefined && y.weighedGrams !== ''
+      ? y.weighedGrams
+      : L.toNumber(y.openedGrams) > 0
+        ? L.remainingGrams(y)
+        : '';
   const chipGroup = (name, values, current) =>
     `<div class="chips wrap" role="group" aria-label="${name}">${values
       .map((v) => `<button type="button" class="chip" aria-pressed="${current === v}" data-act="yarnform.chip" data-field="${name}" data-value="${esc(v)}">${esc(v)}</button>`)
@@ -164,9 +171,9 @@ export function renderYarnForm(id) {
         <div class="field"><label for="f-grams">Poids (g)</label><input id="f-grams" name="gramsPerSkein" type="text" inputmode="decimal" value="${esc(numStr(y.gramsPerSkein))}" placeholder="ex. 50"></div>
         <div class="field"><label for="f-meters">Mètres</label><input id="f-meters" name="metersPerSkein" type="text" inputmode="decimal" value="${esc(numStr(y.metersPerSkein))}" placeholder="ex. 85"></div>
       </div>
-      <p class="hint" style="margin:-6px 0 14px">Poids et mètres sont ceux d’une pelote, lus sur l’étiquette. « Pelotes » compte les pelotes entières.</p>
-      <div class="field"><label for="f-opened">Une pelote entamée : poids restant (g)</label><input id="f-opened" name="openedGrams" type="text" inputmode="decimal" value="${esc(numStr(y.openedGrams))}" placeholder="vide si toutes sont neuves">
-      <p class="hint" style="margin-top:6px">Pèse-la sur ta balance : ce poids s’ajoute aux pelotes entières. Pour plusieurs pelotes entamées, fais une fiche par pelote ou pèse le total depuis la fiche (« Peser le reste »).</p></div>
+      <p class="hint" style="margin:-6px 0 14px">Pelotes : le nombre total, entamées comprises. Poids et mètres sont ceux d’une pelote neuve, lus sur l’étiquette.</p>
+      <div class="field"><label for="f-weighed">Poids restant total, si certaines sont entamées (g)</label><input id="f-weighed" name="weighedGrams" type="text" inputmode="decimal" value="${esc(numStr(weighedValue))}" placeholder="vide si toutes sont neuves">
+      <p class="hint" style="margin-top:6px">Pèse toutes les pelotes de ce fil ensemble sur ta balance et note le total. Il remplace le calcul automatique.</p></div>
       <details class="more"${editing ? ' open' : ''}><summary>Plus de détails</summary><div class="inner">
         <div class="field"><label for="f-color">Nom du coloris</label><input id="f-color" name="colorName" type="text" value="${esc(y.colorName || '')}" placeholder="ex. Taupe"></div>
         <div class="field"><label for="f-brand">Marque</label><input id="f-brand" name="brand" type="text" value="${esc(y.brand || '')}"></div>
@@ -254,6 +261,7 @@ submits['yarn.save'] = async (form) => {
   const prev = id ? store.get('yarns', id) : null;
   let photoId = prev ? prev.photoId : null;
   if (draft.photoFile) photoId = await store.putBlob(draft.photoFile, 'photo-fil.jpg');
+  const weighed = toNum(v.weighedGrams);
   const doc = {
     ...(prev || { usedGrams: 0, weighedGrams: null, inStock: true }),
     id: id || undefined,
@@ -267,7 +275,9 @@ submits['yarn.save'] = async (form) => {
     skeins: toNum(v.skeins) ?? 1,
     gramsPerSkein: toNum(v.gramsPerSkein),
     metersPerSkein: toNum(v.metersPerSkein),
-    openedGrams: toNum(v.openedGrams),
+    openedGrams: null,
+    weighedGrams: weighed === null ? null : Math.max(0, weighed),
+    inStock: weighed === null ? (prev ? prev.inStock !== false : true) : weighed >= 1,
     price: toNum(v.price),
     purchasedAt: v.purchasedAt || '',
     boxId: v.boxId || '',
