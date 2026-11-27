@@ -126,11 +126,15 @@ export function skeinsFromGrams(y, grams) {
   return g > 0 ? grams / g : null;
 }
 
-/** Niveau de stock, aligné sur la formule « Quantité » de Notion. */
-export function stockLevel(grams) {
+/**
+ * Niveau de stock, aligné sur la formule « Quantité » de Notion (seuils en grammes).
+ * Une pelote entière au moins n'est jamais « Quasi fini », quel que soit son poids : on passe `yarn` pour le savoir.
+ */
+export function stockLevel(grams, yarn = null) {
   if (grams >= 500) return { key: 'gros', label: 'Gros stock' };
   if (grams >= 200) return { key: 'moyen', label: 'Moyen' };
-  if (grams >= 100) return { key: 'petit', label: 'Petit' };
+  const g = yarn ? n(yarn.gramsPerSkein) : 0;
+  if (grams >= 100 || (g > 0 && grams >= g * 0.999)) return { key: 'petit', label: 'Petit' };
   return { key: 'fini', label: 'Quasi fini' };
 }
 

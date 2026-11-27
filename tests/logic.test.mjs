@@ -243,3 +243,14 @@ test('fils connus : Phil Coton 4, Phil Irlandais', () => {
   assert.equal(irl.metersPerSkein, 100);
   assert.equal(knownYarn('fil inconnu'), null);
 });
+
+test('niveau de stock : une pelote entière n\'est jamais « Quasi fini »', () => {
+  assert.equal(stockLevel(50).key, 'fini');
+  assert.equal(stockLevel(50, { gramsPerSkein: 50 }).key, 'petit');
+  assert.equal(stockLevel(72, { gramsPerSkein: 50 }).key, 'petit');
+  assert.equal(stockLevel(30, { gramsPerSkein: 50 }).key, 'fini');
+  assert.equal(stockLevel(25, { gramsPerSkein: 25 }).key, 'petit');
+  assert.equal(stockLevel(150).key, 'petit');
+  assert.equal(stockLevel(250, { gramsPerSkein: 50 }).key, 'moyen');
+  assert.equal(stockLevel(600).key, 'gros');
+});

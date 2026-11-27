@@ -33,7 +33,7 @@ function cardHtml(y, d) {
   const rem = L.remainingGrams(y);
   const avail = L.availableGrams(y, d.projects);
   const reservedAll = rem > 0 && avail <= 0;
-  const level = L.stockLevel(rem);
+  const level = L.stockLevel(rem, y);
   const badge = y.inStock === false ? '<span class="pill bad">Épuisé</span>' : reservedAll ? '<span class="pill info">Réservé</span>' : `<span class="pill ${level.key}">${level.label}</span>`;
   const meters = L.metersFromGrams(y, rem);
   const line = [L.skeinsText(y), L.fmtGrams(rem), meters ? `≈ ${L.fmtMeters(meters)}` : ''].filter(Boolean).join(' · ');

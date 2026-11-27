@@ -17,7 +17,7 @@ export function renderYarn(id) {
   const avail = Math.max(0, rem - reserved);
   const meters = L.metersFromGrams(y, rem);
   const skeins = L.skeinsFromGrams(y, rem);
-  const level = L.stockLevel(rem);
+  const level = L.stockLevel(rem, y);
   const box = d.boxes.find((b) => b.id === y.boxId);
   const usedG = y.weighedGrams !== null && y.weighedGrams !== undefined && y.weighedGrams !== '' ? Math.max(0, L.totalGrams(y) - rem) : Number(y.usedGrams) || 0;
   const users = d.projects.filter((p) => (p.slots || []).some((s) => (s.allocations || []).some((a) => a.yarnId === y.id)));
