@@ -213,10 +213,13 @@ test('pelote entamée : s\'ajoute aux pelotes entières', () => {
   const y = { skeins: 1, gramsPerSkein: 50, metersPerSkein: 121, openedGrams: 18, usedGrams: 0 };
   assert.equal(remainingGrams(y), 68);
   assert.equal(remainingGrams({ ...y, usedGrams: 20 }), 48);
-  assert.equal(skeinsText(y), '1 pelote + 1 entamée');
-  assert.equal(skeinsText({ ...y, skeins: 3 }), '3 pelotes + 1 entamée');
-  assert.equal(skeinsText({ ...y, skeins: 0 }), '1 entamée');
+  assert.equal(skeinsText(y), '≈ 1,4 pelote');
+  assert.equal(skeinsText({ ...y, skeins: 3 }), '≈ 3,4 pelotes');
+  assert.equal(skeinsText({ ...y, skeins: 0 }), '≈ 0,4 pelote');
   assert.equal(skeinsText({ skeins: 2, gramsPerSkein: 50 }), '2 pelotes');
+  assert.equal(skeinsText({ skeins: 1, gramsPerSkein: 50, weighedGrams: 72 }), '≈ 1,4 pelote');
+  assert.equal(skeinsText({ skeins: 1, gramsPerSkein: 50, weighedGrams: 0 }), '');
+  assert.equal(skeinsText({ skeins: 2 }), '2 pelotes');
   assert.equal(remainingGrams({ ...y, weighedGrams: 60 }), 60);
 });
 

@@ -84,14 +84,21 @@ export function totalGrams(y) {
   return n(y.skeins) * n(y.gramsPerSkein) + n(y.openedGrams);
 }
 
-/** « 2 pelotes », « 1 pelote + 1 entamée », « 1 entamée » : pelotes entières plus, s'il y en a une, la pelote entamée. */
+/**
+ * Nombre de pelotes restantes, écrit pareil partout : « 2 pelotes », « ≈ 1,4 pelote ».
+ * Il se calcule d'après le poids restant et le poids d'une pelote ; sans ce dernier, on garde le nombre saisi.
+ */
 export function skeinsText(y) {
+  const g = n(y.gramsPerSkein);
+  const fmt = (v) => String(v).replace('.', ',');
+  if (g > 0) {
+    const s = remainingGrams(y) / g;
+    if (s <= 0) return '';
+    const r = Math.round(s * 10) / 10;
+    return `${Math.abs(s - r) > 0.001 ? '≈ ' : ''}${fmt(r)} pelote${r >= 2 ? 's' : ''}`;
+  }
   const whole = n(y.skeins);
-  const opened = n(y.openedGrams) > 0;
-  const parts = [];
-  if (whole > 0) parts.push(`${String(Math.round(whole * 100) / 100).replace('.', ',')} pelote${whole > 1 ? 's' : ''}`);
-  if (opened) parts.push('1 entamée');
-  return parts.join(' + ');
+  return whole > 0 ? `${fmt(Math.round(whole * 100) / 100)} pelote${whole >= 2 ? 's' : ''}` : '';
 }
 
 /** Restant en grammes : le poids pesé remplace le calcul. */
