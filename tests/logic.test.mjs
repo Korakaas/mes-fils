@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  guessWeightCategory, WEIGHT_GUIDE, WEIGHTS,
+  knownYarn, guessWeightCategory, WEIGHT_GUIDE, WEIGHTS,
   skeinsText,
   safeHttpUrl, safeServerUrl, safeBlobType, resetAppShell,
   remainingGrams, metersFromGrams, stockLevel, reservedGrams, availableGrams, needGrams, withMargin,
@@ -225,7 +225,18 @@ test('épaisseur devinée d\'après le nom du fil', () => {
   assert.equal(guessWeightCategory('Phildar Coton 3'), 'Sport');
   assert.equal(guessWeightCategory('Scheepjes Catona'), 'Fingering');
   assert.equal(guessWeightCategory('Ricorumi DK'), 'DK');
-  assert.equal(guessWeightCategory('Phil Coton 4'), '');
+  assert.equal(guessWeightCategory('Phil Coton 5'), '');
   assert.equal(guessWeightCategory(''), '');
   assert.deepEqual(WEIGHT_GUIDE.map((r) => r[0]), WEIGHTS);
+});
+
+test('fils connus : Phil Coton 4, Phil Irlandais', () => {
+  assert.equal(guessWeightCategory('Phil Coton 4'), 'DK');
+  assert.deepEqual(knownYarn('Phildar Coton 4'), { weightCategory: 'DK', material: 'Coton', brand: 'Phildar', gramsPerSkein: 50, metersPerSkein: 85 });
+  assert.equal(guessWeightCategory('Phil Coton 4,5'), '');
+  assert.equal(guessWeightCategory('Phil Coton 4.5'), '');
+  const irl = knownYarn('Phil Irlandais');
+  assert.equal(irl.weightCategory, 'Aran');
+  assert.equal(irl.metersPerSkein, 100);
+  assert.equal(knownYarn('fil inconnu'), null);
 });

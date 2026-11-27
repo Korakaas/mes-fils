@@ -16,17 +16,24 @@ export const WEIGHT_GUIDE = [
   ['Super bulky', '6 Super bulky', '14 plis et +', '9 – 15', '< 100'],
 ];
 
-// Fils dont l'épaisseur est connue (proposée seulement quand le champ est vide)
-const KNOWN_WEIGHTS = [
-  [/phil(?:dar)?\s*coton\s*3\b|coton\s*3\b.*phildar/i, 'Sport'],
-  [/\bcatona\b/i, 'Fingering'],
-  [/\bricorumi\b/i, 'DK'],
+// Fils connus (proposés seulement dans les champs encore vides). Poids et mètres : ceux d'une pelote.
+const KNOWN_YARNS = [
+  [/phil(?:dar)?\s*coton\s*3\b|coton\s*3\b.*phildar/i, { weightCategory: 'Sport', material: 'Coton', brand: 'Phildar', gramsPerSkein: 50, metersPerSkein: 121 }],
+  [/phil(?:dar)?\s*coton\s*4(?![\d,.])|coton\s*4(?![\d,.]).*phildar/i, { weightCategory: 'DK', material: 'Coton', brand: 'Phildar', gramsPerSkein: 50, metersPerSkein: 85 }],
+  [/phil(?:dar)?\s*irlandais/i, { weightCategory: 'Aran', material: 'Mélange', brand: 'Phildar', gramsPerSkein: 50, metersPerSkein: 100 }],
+  [/\bcatona\b/i, { weightCategory: 'Fingering', material: 'Coton', brand: 'Scheepjes' }],
+  [/\bricorumi\b/i, { weightCategory: 'DK', material: 'Coton', brand: 'Scheepjes' }],
 ];
 
-export function guessWeightCategory(name) {
+export function knownYarn(name) {
   const s = String(name || '');
-  const hit = KNOWN_WEIGHTS.find(([re]) => re.test(s));
-  return hit ? hit[1] : '';
+  const hit = KNOWN_YARNS.find(([re]) => re.test(s));
+  return hit ? { ...hit[1] } : null;
+}
+
+export function guessWeightCategory(name) {
+  const k = knownYarn(name);
+  return k ? k.weightCategory : '';
 }
 
 export const MATERIALS = ['Coton', 'Acrylique', 'Laine', 'Mohair', 'Mélange', 'Bambou', 'Lin', 'Soie', 'Polyester', 'Autre'];

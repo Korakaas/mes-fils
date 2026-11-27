@@ -198,13 +198,20 @@ export function afterYarnForm() {
   hydratePhotos(document.getElementById('view'));
 }
 
-// Épaisseur proposée d'après le nom, seulement si rien n'est encore choisi
+// Fil connu : épaisseur, matière, marque, poids et mètres d'une pelote proposés, uniquement dans les champs encore vides
 inputs['yarnform.name'] = (el) => {
   const form = document.getElementById('yarn-form');
-  if (!form || form.elements.weightCategory.value) return;
-  const w = L.guessWeightCategory(el.value);
-  const chip = w && form.querySelector(`.chip[data-field="weightCategory"][data-value="${w}"]`);
-  if (chip) chip.click();
+  const k = form && L.knownYarn(el.value);
+  if (!k) return;
+  for (const field of ['weightCategory', 'material']) {
+    if (form.elements[field].value || !k[field]) continue;
+    const chip = form.querySelector(`.chip[data-field="${field}"][data-value="${k[field]}"]`);
+    if (chip) chip.click();
+  }
+  for (const field of ['brand', 'gramsPerSkein', 'metersPerSkein']) {
+    const input = form.elements[field];
+    if (input && !input.value && k[field] !== undefined) input.value = String(k[field]);
+  }
 };
 
 actions['yarnform.guide'] = () => {
