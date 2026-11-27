@@ -571,8 +571,9 @@ export function renderChoose(projectId, slotId) {
   const label = (r) => yarnTitle(r.yarn);
   const nFilter = f.weights.length + f.materials.length + f.colors.length;
   const pickRow = (ids, title, sub, pillHtml) => {
+    const ys = ids.map((i) => d.yarnsById[i]).filter(Boolean);
     const on = ids.every((i) => sel.has(i));
-    return `<button type="button" class="pick" aria-pressed="${on}" data-act="choose.toggle" data-ids="${esc(ids.join(','))}"><span class="box"></span><span class="grow"><span class="t">${title}</span><span class="s">${sub}</span></span>${pillHtml || ''}</button>`;
+    return `<button type="button" class="pick" aria-pressed="${on}" data-act="choose.toggle" data-ids="${esc(ids.join(','))}"><span class="box"></span>${pickThumbs(ys)}<span class="grow"><span class="t">${title}</span><span class="s">${sub}</span></span>${pillHtml || ''}</button>`;
   };
   const enough = res.enough.map((r) =>
     pickRow([r.yarn.id], esc(label(r)), `${esc(L.fmtGrams(r.available))} disponibles · ${esc(r.sameWeight ? 'Même épaisseur' : r.yarn.weightCategory ? `Autre épaisseur (${r.yarn.weightCategory})` : 'Épaisseur non précisée')}${r.sameColor ? ' · Même couleur' : ''} · reste ${esc(L.fmtGrams(r.leftover))}`),
@@ -608,6 +609,12 @@ export function renderChoose(projectId, slotId) {
     </div>`;
 }
 
+/** Vignette d'un fil dans une liste de choix : sa photo, sinon sa couleur. Pour une combinaison, une vignette par fil. */
+function pickThumbs(yarns) {
+  const list = yarns.slice(0, 2);
+  return `<span class="thumbs${list.length > 1 ? ' two' : ''}">${list.map((y) => `<span class="sw" ${photoAttrs(y.photoId, y.colorKey, y.colorHex)}></span>`).join('')}</span>`;
+}
+
 /** Choix d'un fil pour une petite quantité : on propose d'abord les restes qui ressemblent à ce qu'il faut. */
 function renderChooseScraps(d, p, slot) {
   const f = ui.chooseFilters;
@@ -618,7 +625,7 @@ function renderChooseScraps(d, p, slot) {
   const list = rows
     .map((r) => {
       const tags = [r.sameColor ? 'Même couleur' : '', r.sameWeight ? 'Même épaisseur' : ''].filter(Boolean).join(' · ');
-      return `<button type="button" class="pick" aria-pressed="${sel.has(r.yarn.id)}" data-act="choose.toggle" data-ids="${esc(r.yarn.id)}"><span class="box"></span><span class="grow"><span class="t">${esc(yarnTitle(r.yarn))}</span><span class="s">${esc(L.fmtGrams(r.available))} disponibles${tags ? ` · ${esc(tags)}` : ''}</span></span></button>`;
+      return `<button type="button" class="pick" aria-pressed="${sel.has(r.yarn.id)}" data-act="choose.toggle" data-ids="${esc(r.yarn.id)}"><span class="box"></span>${pickThumbs([r.yarn])}<span class="grow"><span class="t">${esc(yarnTitle(r.yarn))}</span><span class="s">${esc(L.fmtGrams(r.available))} disponibles${tags ? ` · ${esc(tags)}` : ''}</span></span></button>`;
     })
     .join('');
   const n = [...sel].filter((id) => d.yarnsById[id]).length;
